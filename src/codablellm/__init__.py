@@ -12,7 +12,7 @@ from codablellm.repoman import (
     create_source_dataset,
 )
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 __all__ = [
     "create_source_dataset",
     "create_decompiled_dataset",

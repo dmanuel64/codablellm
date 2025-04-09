@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/dmanuel64/codablellm/compare/v1.1.0...v1.1.1) (2025-04-09)
+
+
+### Documentation
+
+* auto-generate about page ([a2871b2](https://github.com/dmanuel64/codablellm/commit/a2871b22577d6f842968132e893d18cbae8dd529))
+
 ## [1.1.0](https://github.com/dmanuel64/codablellm/compare/v0.1.0...v1.1.0) (2025-03-31)
 
 
