@@ -67,6 +67,22 @@ Complete documentation is available on [Read the Docs](https://codablellm.readth
 - [Supported Languages & Decompilers](https://codablellm.readthedocs.io/en/latest/Built-In%20Support/)
 - [API Reference](https://codablellm.readthedocs.io/en/latest/documentation/codablellm/)
 
+## Citation
+
+If you use this tool in your research, please cite [the paper](https://arxiv.org/abs/2507.22066) associated with it:
+
+```bibtex
+@misc{manuel2025codablellmautomatingdecompiledsource,
+      title={CodableLLM: Automating Decompiled and Source Code Mapping for LLM Dataset Generation}, 
+      author={Dylan Manuel and Paul Rad},
+      year={2025},
+      eprint={2507.22066},
+      archivePrefix={arXiv},
+      primaryClass={cs.SE},
+      url={https://arxiv.org/abs/2507.22066}, 
+}
+```
+
 ## Contributing
 
 We welcome contributions from the community! See [CONTRIBUTING.md](https://github.com/dmanuel64/codablellm/blob/main/CONTRIBUTING.md) for guidelines, development setup, and how to get started.
