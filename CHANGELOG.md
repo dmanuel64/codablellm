@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/dmanuel64/codablellm/compare/v1.3.0...v1.3.1) (2025-08-08)
+
+
+### Documentation
+
+* updated README to include paper information ([30a4a83](https://github.com/dmanuel64/codablellm/commit/30a4a834963a3728d1b569441b47484f129676d6))
+
 ## [1.3.0](https://github.com/dmanuel64/codablellm/compare/v1.2.0...v1.3.0) (2025-05-31)
 
 
