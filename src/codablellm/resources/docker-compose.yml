@@ -68,7 +68,7 @@ services:
     command: prefect worker start --pool local-pool
 
   app:
-    build: .
+    image: dmanuel99/codablellm:latest
     volumes:
       - .:/workspace
     working_dir: /workspace

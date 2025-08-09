@@ -96,8 +96,6 @@ class Ghidra(Decompiler):
                                 "-deleteProject",
                             ],
                             task=f"Decompiling {path.name}...",
-                            print_errors=False,
-                            log_level="debug",
                         )
                     except subprocess.CalledProcessError as e:
                         cmd_str = " ".join(e.cmd)
