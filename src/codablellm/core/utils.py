@@ -14,7 +14,9 @@ from contextlib import AbstractContextManager, contextmanager, nullcontext
 from functools import partial, wraps
 from pathlib import Path
 from queue import Queue
+from threading import Thread
 from typing import (
+    IO,
     Any,
     Callable,
     Collection,
@@ -43,6 +45,7 @@ from prefect.task_runners import ThreadPoolTaskRunner
 from prefect_dask.task_runners import DaskTaskRunner
 from rich import print
 from rich.prompt import Prompt
+from rich.status import Status
 from tree_sitter import Node, Parser
 
 from codablellm.exceptions import ExtraNotInstalled, TSParsingError
@@ -406,59 +409,74 @@ def add_command_args(command: Command, *args: Any) -> Command:
     return [*command, *args]
 
 
+def record_stream(stream: IO[str], log_func: Callable, store_list: List[str]) -> None:
+    for line in iter(stream.readline, ""):
+        line = line.rstrip("\n")
+        store_list.append(line)
+        log_func(line)  # log in real time
+    stream.close()
+
+
 def execute_command(
     command: Command,
     error_handler: CommandErrorHandler = "none",
     task: Optional[str] = None,
-    ctx: AbstractContextManager[Any] = nullcontext(),
-    log_level: Literal["debug", "info"] = "info",
-    print_errors: bool = True,
     cwd: Optional[PathLike] = None,
-) -> str:
+) -> None:
     """
     Executes a CLI command with optional interactive error handling.
 
     Parameters:
         command: The CLI command to be executed.
-        error_handler: 'none' | 'interactive'
+        error_handler: 'none' | 'interactive' | 'ignore
         task: Optional description for logging.
-        ctx: Context manager used to wrap the execution.
-        log_level: Log level for the task description.
-        print_errors: If True, prints output on error.
         cwd: Working directory to execute the command in.
-
-    Returns:
-        The output of the command.
 
     Raises:
         CalledProcessError: If the command fails and error_handler is 'none'.
     """
     if isinstance(command, str):
         command = command.split()
-    log_task = logger.debug if log_level == "debug" else logger.info
     output = ""
-
     if not task:
-        task = f"Executing: {repr(command)}"
+        task = f"Executing: {repr(command)}..."
 
     while True:
-        if task:
-            log_task(task)
-
+        logger.debug(task)
         try:
-            with ctx:
-                output = subprocess.check_output(
-                    command, text=True, cwd=cwd, stderr=subprocess.STDOUT
-                )
-            log_task(f"Successfully executed {repr(command)}")
+            with Status(task, spinner="arc"):
+                with subprocess.Popen(
+                    command,
+                    cwd=cwd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,  # line-buffered
+                ) as process:
+                    stdout_lines = []
+                    stderr_lines = []
+                    # Two threads to handle stdout & stderr independently
+                    stdout_thread = Thread(
+                        target=record_stream,
+                        args=(process.stdout, logger.debug, stdout_lines),
+                    )
+                    stderr_thread = Thread(
+                        target=record_stream,
+                        args=(process.stderr, logger.error, stderr_lines),
+                    )
+                    stdout_thread.start()
+                    stderr_thread.start()
+                    stdout_thread.join()
+                    stderr_thread.join()
+                if process.returncode:
+                    raise subprocess.CalledProcessError(
+                        process.returncode,
+                        process.args,
+                        output="\n".join(stdout_lines),
+                        stderr="\n".join(stderr_lines),
+                    )
             break  # Exit loop on success
-
-        except subprocess.CalledProcessError as e:
-            output = e.output
-            logger.error(f"Command failed: {repr(command)}")
-            if print_errors:
-                print(f"[red][b]Command failed: {repr(command)}[/b]\nOutput: {output}")
-
+        except subprocess.CalledProcessError:
             if error_handler == "interactive":
                 result = Prompt.ask(
                     "A command error occurred. You can manually fix the issue and retry, ignore the error to continue, "
@@ -467,13 +485,10 @@ def execute_command(
                     case_sensitive=False,
                     default="retry",
                 )
-
                 if result == "retry":
                     continue
                 elif result == "ignore":
                     break
-                elif result == "abort":
-                    raise e
                 elif result == "edit":
                     command_str = (
                         command
@@ -489,13 +504,10 @@ def execute_command(
                         else edited_command.split()
                     )
                     continue
-
-            # If not interactive, raise immediately
+            elif error_handler == "ignore":
+                break
+            # If no error handler or "abort", raise immediately
             raise
-
-    if output:
-        logger.debug(f'{repr(command)} output:\n"{output}"')
-    return output
 
 
 REBASED_DIR_ENVIRON_KEY: Final[str] = "CODABLELLM_REBASED_DIR"

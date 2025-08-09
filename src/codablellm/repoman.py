@@ -41,7 +41,6 @@ def build(
     utils.execute_command(
         command,
         task=task,
-        ctx=nullcontext(),
         **utils.resolve_kwargs(error_handler=error_handler, cwd=cwd),
     )
 
@@ -65,7 +64,6 @@ def cleanup(
     utils.execute_command(
         command,
         task=task,
-        ctx=nullcontext(),
         **utils.resolve_kwargs(error_handler=error_handler, cwd=cwd),
     )
 

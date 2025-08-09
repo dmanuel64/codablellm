@@ -34,4 +34,5 @@ def run_containerized() -> None:
             ["docker", "compose", "run", "--rm", "app", "codablellm", *args],
             task="Running CodableLLM Docker compose file...",
             cwd=temp_dir,
+            error_handler="ignore",
         )
