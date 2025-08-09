@@ -1,4 +1,5 @@
 import logging
+from subprocess import CalledProcessError
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -30,9 +31,30 @@ def run_containerized() -> None:
         with open(compose_file_path, "w") as compose_file:
             yaml.safe_dump(compose_contents, compose_file)
         logger.debug(f'Updated app service image to "{image}:{tag}"')
-        utils.execute_command(
-            ["docker", "compose", "run", "--rm", "app", "codablellm", *args],
-            task="Running CodableLLM Docker compose file...",
-            cwd=temp_dir,
-            error_handler="ignore",
-        )
+        try:
+            utils.execute_command(
+                ["docker", "compose", "run", "--rm", "app", "codablellm", *args],
+                task="Running CodableLLM Docker compose file...",
+                cwd=temp_dir,
+                output_handler='show',
+                show_spinner=False,
+            )
+        except CalledProcessError:
+            logger.warning('Retrying docker compose command with with "--no-deps"')
+            utils.execute_command(
+                [
+                    "docker",
+                    "compose",
+                    "run",
+                    "--rm",
+                    "--no-deps",
+                    "app",
+                    "codablellm",
+                    *args,
+                ],
+                task="Running CodableLLM Docker compose file...",
+                cwd=temp_dir,
+                error_handler="ignore",
+                output_handler='show',
+                show_spinner=False,
+            )

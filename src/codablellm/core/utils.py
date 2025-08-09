@@ -422,6 +422,8 @@ def execute_command(
     error_handler: CommandErrorHandler = "none",
     task: Optional[str] = None,
     cwd: Optional[PathLike] = None,
+    output_handler: Literal["log", "pipe", "show"] = "log",
+    show_spinner: bool = True,
 ) -> None:
     """
     Executes a CLI command with optional interactive error handling.
@@ -444,12 +446,21 @@ def execute_command(
     while True:
         logger.debug(task)
         try:
-            with Status(task, spinner="arc"):
+            with Status(task, spinner="arc") if show_spinner else nullcontext():
+                if output_handler == "log":
+                    stdout = subprocess.PIPE
+                    stderr = subprocess.PIPE
+                elif output_handler == "pipe":
+                    stdout = subprocess.PIPE
+                    stderr = subprocess.STDOUT
+                elif output_handler == "show":
+                    stdout = None
+                    stderr = None
                 with subprocess.Popen(
                     command,
                     cwd=cwd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    stdout=stdout,
+                    stderr=stderr,
                     text=True,
                     bufsize=1,  # line-buffered
                 ) as process:
@@ -464,10 +475,12 @@ def execute_command(
                         target=record_stream,
                         args=(process.stderr, logger.error, stderr_lines),
                     )
-                    stdout_thread.start()
-                    stderr_thread.start()
-                    stdout_thread.join()
-                    stderr_thread.join()
+                    if output_handler != "show":
+                        stdout_thread.start()
+                        if output_handler == "log":
+                            stderr_thread.start()
+                            stderr_thread.join()
+                        stdout_thread.join()
                 if process.returncode:
                     raise subprocess.CalledProcessError(
                         process.returncode,
