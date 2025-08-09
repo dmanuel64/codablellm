@@ -1,4 +1,5 @@
 import logging
+import shutil
 from subprocess import CalledProcessError
 import sys
 from pathlib import Path
@@ -18,11 +19,30 @@ COMPOSE_FILE: Final[Path] = Path(__file__).parent / "resources" / "docker-compos
 logger = logging.getLogger(__name__)
 
 
-def run_containerized() -> None:
-    args = [arg for arg in sys.argv[1:] if arg != "--containerize" or arg != "-C"]
+def run_containerized(save_as: Path, *other_paths: Path) -> None:
+    # TODO: implement other paths in caller
+    actual_save_as = None
+    # Get all non-containerize arguments
+    args = [arg for arg in sys.argv[1:] if arg != "--containerize" and arg != "-C"]
     with open(COMPOSE_FILE, "r") as compose_file:
         compose_contents = yaml.safe_load(compose_file)
     with TemporaryDirectory() as temp_dir:
+        # For any path arguments, copy them to the temporary directory
+        for idx, arg in enumerate(args[::]):
+            try:
+                path = Path(arg)
+                if path in other_paths or path == save_as:
+                    rebased_path = Path(temp_dir) / f"arg_{idx}_{path.name}"
+                    logger.debug(f"Rebasing arg/opt '{path}' to '{rebased_path}'")
+                    if path.exists():
+                        # TODO: this won't work if there are additional libraries being used in the transform file
+                        shutil.copy(path, rebased_path)
+                    if path == save_as:
+                        actual_save_as = rebased_path
+                        actual_save_as.touch()
+                    args[idx] = str(rebased_path)
+            except Exception:
+                pass
         # Set tag in compose file
         compose_file_path = Path(temp_dir) / "docker-compose.yml"
         image, tag = compose_contents["services"]["app"]["image"].split(":")
@@ -36,7 +56,7 @@ def run_containerized() -> None:
                 ["docker", "compose", "run", "--rm", "app", "codablellm", *args],
                 task="Running CodableLLM Docker compose file...",
                 cwd=temp_dir,
-                output_handler='show',
+                output_handler="show",
                 show_spinner=False,
             )
         except CalledProcessError:
@@ -55,6 +75,10 @@ def run_containerized() -> None:
                 task="Running CodableLLM Docker compose file...",
                 cwd=temp_dir,
                 error_handler="ignore",
-                output_handler='show',
+                output_handler="show",
                 show_spinner=False,
             )
+        if actual_save_as:
+            # Copy output dataset to actual dataset file
+            save_as.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(actual_save_as, save_as)

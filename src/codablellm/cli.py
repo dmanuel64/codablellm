@@ -432,7 +432,7 @@ def command(
     Creates a code dataset from a local repository.
     """
     if containerize:
-        container.run_containerized()
+        container.run_containerized(save_as)
         return
     if decompiler != codablellm.decompiler.get().symbol:
         # Configure decompiler
