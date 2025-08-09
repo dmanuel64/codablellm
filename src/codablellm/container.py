@@ -40,7 +40,7 @@ def run_containerized(save_as: Path, *other_paths: Path) -> None:
                     if path == save_as:
                         actual_save_as = rebased_path
                         actual_save_as.touch()
-                    args[idx] = str(rebased_path)
+                    args[idx] = rebased_path.name
             except Exception:
                 pass
         # Set tag in compose file

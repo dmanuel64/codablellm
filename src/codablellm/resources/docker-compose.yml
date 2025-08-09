@@ -72,9 +72,6 @@ services:
     volumes:
       - .:/workspace
     working_dir: /workspace
-    # environment:
-    #   PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@db/prefect
-    #   PREFECT_API_ENABLE: "true"  # or false if you want ephemeral mode
     depends_on:
       prefect-worker:
         condition: service_started
