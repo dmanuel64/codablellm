@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: prefect
+      POSTGRES_PASSWORD: prefect
+      POSTGRES_DB: prefect
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "prefect"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    image: dmanuel99/codablellm:latest
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    environment:
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@db/prefect
+      PREFECT_API_ENABLE: "true"  # or false if you want ephemeral mode
+    depends_on:
+      db:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+    entrypoint: ""  # So your custom command runs

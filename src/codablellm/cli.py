@@ -15,6 +15,7 @@ from rich import print
 from typer import Argument, Exit, Option, Typer
 
 import codablellm
+from codablellm import container
 from codablellm.core import downloader
 from codablellm.core.decompiler import DecompileConfig
 from codablellm.core.extractor import ExtractConfig
@@ -216,6 +217,12 @@ CLEANUP: Final[Optional[str]] = Option(
     "cleaned up after the dataset is created, using the value of "
     "this option as the build command.",
 )
+CONTAINERIZE: Final[bool] = Option(
+    False,
+    "--containerize / --local",
+    "-C / -l",
+    help="Run inside a Docker container instead of the local environment.",
+)
 DECOMPILE: Final[bool] = Option(
     False,
     "--decompile / --source",
@@ -395,6 +402,7 @@ def command(
     build_error_handling: CommandErrorHandler = BUILD_ERROR_HANDLING,
     cleanup: Optional[str] = CLEANUP,
     cleanup_error_handling: CommandErrorHandler = CLEANUP_ERROR_HANDLING,
+    containerize: bool = CONTAINERIZE,
     checkpoint: int = CHECKPOINT,
     debug: bool = DEBUG,
     decompile: bool = DECOMPILE,
@@ -423,6 +431,9 @@ def command(
     """
     Creates a code dataset from a local repository.
     """
+    if containerize:
+        container.run_containerized()
+        return
     if decompiler != codablellm.decompiler.get().symbol:
         # Configure decompiler
         codablellm.decompiler.set(f"(CLI-Set) {decompiler[1]}", decompiler)

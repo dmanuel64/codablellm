@@ -121,6 +121,7 @@ codablellm = "codablellm.__main__:main"
 
 [tool.setuptools.package-data]
 "codablellm.resources.ghidra_scripts" = ["*.py"]
+"codablellm.resources" = ["docker-compose.yml"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
