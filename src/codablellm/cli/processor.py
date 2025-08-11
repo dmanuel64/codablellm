@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Type
+from typing import Any, Type
 
 from typer import BadParameter, Exit
 
@@ -39,7 +39,8 @@ def validate_dataset_format(path: Path) -> Path:
     return path
 
 
-def parse_symbol(value: str) -> DynamicSymbol:
+def parse_symbol(value: Any) -> DynamicSymbol:
+    value = str(value)
     # Check for common classes/functions for decompilers/extractors/mappers
     def verify_language_support(extractor_type: Type[Extractor], extra: str) -> None:
         if not extractor_type.is_installed():

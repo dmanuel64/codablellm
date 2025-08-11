@@ -76,7 +76,7 @@ BuildOpt = Annotated[
         "--build",
         "-b",
         metavar="COMMAND",
-        rich_help_panel="Utils and Configs",
+        rich_help_panel="Repository Options",
         help="If --decompile is specified, the repository will be "
         "built using the value of this option as the build command.",
     ),
@@ -85,6 +85,7 @@ BuildErrorHandlerOpt = Annotated[
     CommandErrorHandlerChoice,
     Option(
         ...,
+        rich_help_panel="Repository Options",
         help="Specifies how to handle errors that occur "
         "during the cleanup process. Options include "
         "ignoring the error, raising an exception, or "
@@ -98,6 +99,7 @@ CleanupOpt = Annotated[
         "--cleanup",
         "-c",
         metavar="COMMAND",
+        rich_help_panel="Repository Options",
         help="If --decompile is specified, the repository will be "
         "cleaned up after the dataset is created, using the value of "
         "this option as the build command.",
@@ -107,6 +109,7 @@ CleanupErrorHandlerOpt = Annotated[
     CommandErrorHandlerChoice,
     Option(
         ...,
+        rich_help_panel="Repository Options",
         help="Specifies how to handle errors that occur "
         "during the cleanup process. Options include "
         "ignoring the error, raising an exception, or "
@@ -118,6 +121,7 @@ ClearExtractorsOpt = Annotated[
     Option(
         ...,
         "--clear-extractors",
+        rich_help_panel='Extractor Options',
         help="Unregister all builtin extractors.",
         # callback=codablellm.extractor.unregister_all,
     ),
@@ -137,6 +141,7 @@ DecompileOpt = Annotated[
         ...,
         "--decompile / --source",
         "-d / -s",
+        rich_help_panel="Decompiler Options",
         help="If the language supports decompiled code mapping, use "
         "--decompiler to decompile the binaries specified by the bins "
         "argument and add decompiled code to the dataset.",
@@ -147,6 +152,7 @@ DecompilerOpt = Annotated[
     Option(
         ...,
         help="Decompiler to use.",
+        rich_help_panel="Decompiler Options",
         parser=processor.parse_symbol,
         metavar="SYMBOL",
     ),
@@ -165,6 +171,7 @@ ExtraPathOpt = Annotated[
     Option(
         ...,
         exists=True,
+        rich_help_panel="Repository Options",
         help="Extra files/directories to add to the repository (e.g. build scripts).",
     ),
 ]
@@ -172,6 +179,7 @@ GenerationModeOpt = Annotated[
     GenerationModeChoice,
     Option(
         ...,
+        rich_help_panel="Dataset Options",
         help="Specify how the dataset should be generated from the repository.",
     ),
 ]
@@ -182,6 +190,7 @@ GhidraOpt = Annotated[
         envvar=Ghidra.ENVIRON_KEY,
         dir_okay=False,
         # callback=lambda v: Ghidra.set_path(v) if v else None,
+        rich_help_panel="Ghidra Options",
         help="Path to Ghidra's analyzeHeadless command.",
     ),
 ]
@@ -192,6 +201,7 @@ GhidraScriptOpt = Annotated[
         dir_okay=False,
         exists=True,
         # callback=lambda v: Ghidra.set_decompile_script(v),
+        rich_help_panel="Ghidra Options",
         help="Path to the decompile script for Ghidra that serialzies a DecompiledFunctionJSONObject",
     ),
 ]
@@ -200,6 +210,7 @@ GitOpt = Annotated[
     Option(
         ...,
         "--git / --archive",
+        rich_help_panel='Download Options',
         help="Determines whether --url is a Git "
         "download URL or a tarball/zipfile download URL.",
     ),
@@ -210,6 +221,7 @@ MapperOpt = Annotated[
         ...,
         parser=processor.parse_symbol,
         metavar="SYMBOL",
+        rich_help_panel="Dataset Options",
         help="Mapper to use for mapping decompiled functions to source code functions.",
     ),
 ]
@@ -269,6 +281,7 @@ SymbolRemoverOpt = Annotated[
     Optional[SymbolRemoverChoice],
     Option(
         ...,
+        rich_help_panel="Decompiler Options",
         help="If a decompiled dataset is being created, strip the symbols "
         "after decompiling",
     ),
@@ -281,6 +294,7 @@ TransformOpt = Annotated[
         "-t",
         parser=processor.parse_symbol,
         metavar="SYMBOL",
+        rich_help_panel="Extractor Options",
         help="Transformation function to use when extracting source code functions.",
     ),
 ]
@@ -290,6 +304,7 @@ RecursiveOpt = Annotated[
         ...,
         "--recursive",
         "-r",
+        rich_help_panel="Decompiler Options",
         help="Recursively search for binaries in the specified bins directories.",
     ),
 ]
@@ -301,6 +316,7 @@ RegisterExtractorOpt = Annotated[
         "-R",
         parser=processor.parse_symbol,
         metavar="SYMBOL",
+        rich_help_panel="Extractor Options",
         help="Additional extractor to register.",
     ),
 ]
@@ -308,6 +324,7 @@ RunFromOpt = Annotated[
     RunFromChoice,
     Option(
         ...,
+        rich_help_panel="Repository Options",
         help="Where to run build/clean commands from: 'repo' (the root "
         "of the repository, whether real or temp) or 'cwd' (your "
         "current shell directory). Useful for managing relative path behavior.",
@@ -317,6 +334,7 @@ UrlOpt = Annotated[
     Optional[str],
     Option(
         ...,
+        rich_help_panel='Download Options',
         help="Download a remote repository and save at the local path "
         "specified by the REPO argument.",
     ),

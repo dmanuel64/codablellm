@@ -1,6 +1,8 @@
 from typing import Final
 from typer import Typer
 
+from rich import print
+
 from codablellm.cli import parameters
 from codablellm.core import decompiler
 from codablellm.dataset import DecompiledCodeDatasetConfig, SourceCodeDatasetConfig
@@ -65,3 +67,5 @@ def command(
     Learn more at the [Typer docs website](https://typer.tiangolo.com)
     """
     print(locals())
+    user_input = "[blink]Gotcha![/blink]"
+    print(user_input)
