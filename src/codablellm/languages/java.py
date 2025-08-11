@@ -1,7 +1,6 @@
 from pathlib import Path
-from typing import Final, Optional, Sequence, Set
+from typing import Final, Set
 
-from codablellm.decompilers.angr_decompiler import is_installed
 
 try:
     import tree_sitter_java as tsj
@@ -10,7 +9,6 @@ except ModuleNotFoundError:
 
 from tree_sitter import Language
 
-from codablellm.core.function import SourceFunction
 from codablellm.core.utils import PathLike, requires_extra
 from codablellm.languages.common import TreeSitterExtractor, rglob_file_extensions
 
@@ -87,5 +85,6 @@ class JavaExtractor(TreeSitterExtractor):
     def get_language(self) -> Language:
         return Language(tsj.language())  # type: ignore
 
-    def is_installed(self) -> bool:
+    @staticmethod
+    def is_installed() -> bool:
         return tsj is not None

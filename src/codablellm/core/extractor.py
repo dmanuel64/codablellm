@@ -13,15 +13,15 @@ from typing import (
     Callable,
     Dict,
     Final,
+    FrozenSet,
     List,
-    Literal,
     Mapping,
     NamedTuple,
     Optional,
-    OrderedDict,
     Sequence,
     Set,
     Type,
+    Union,
 )
 
 from codablellm.core.function import SourceFunction
@@ -35,65 +35,17 @@ from codablellm.core.utils import (
 )
 
 
-class RegisteredExtractor(NamedTuple):
-    language: str
-    symbol: DynamicSymbol
-
-
-_EXTRACTORS: Final[OrderedDict[str, RegisteredExtractor]] = OrderedDict(
-    {
-        "C": RegisteredExtractor(
-            "C", (Path(__file__).parent.parent / "languages" / "c.py", "CExtractor")
-        ),
-        "Rust": RegisteredExtractor(
-            "Rust",
-            (Path(__file__).parent.parent / "languages" / "rust.py", "RustExtractor"),
-        ),
-        "JavaScript": RegisteredExtractor(
-            "JavaScript",
-            (
-                Path(__file__).parent.parent / "languages" / "javascript.py",
-                "JavaScriptExtractor",
-            ),
-        ),
-        "Python": RegisteredExtractor(
-            "Python",
-            (
-                Path(__file__).parent.parent / "languages" / "python_language.py",
-                "PythonExtractor",
-            ),
-        ),
-        "C++": RegisteredExtractor(
-            "C++",
-            (Path(__file__).parent.parent / "languages" / "cpp.py", "CPPExtractor"),
-        ),
-        "Java": RegisteredExtractor(
-            "Java",
-            (Path(__file__).parent.parent / "languages" / "java.py", "JavaExtractor"),
-        ),
-        "TypeScript": RegisteredExtractor(
-            "TypeScript",
-            (
-                Path(__file__).parent.parent / "languages" / "typescript.py",
-                "TypeScriptExtractor",
-            ),
-        ),
-    }
-)
-
-BUILTIN_EXTRACTORS: Final[Mapping[str, RegisteredExtractor]] = _EXTRACTORS
+_EXTRACTORS: Final[Dict[str, DynamicSymbol]] = {}
 
 logger = logging.getLogger(__name__)
 
 
-def get_registered() -> Sequence[RegisteredExtractor]:
-    return list(_EXTRACTORS.values())
+def get_registered() -> Dict[str, DynamicSymbol]:
+    return dict(_EXTRACTORS)
 
 
 def register(
-    language: str,
-    symbol: DynamicSymbol,
-    order: Optional[Literal["first", "last"]] = None,
+    extractor: DynamicSymbol,
 ) -> None:
     """
     Registers a new source code extractor for a given language.
@@ -103,42 +55,28 @@ def register(
         class_path: The full import path to the extractor class.
         order: Optional order for insertion. If 'first', prepends the extractor; if 'last', appends it.
     """
-    file, class_name = symbol
-    registered_extractor = RegisteredExtractor(language, (Path(file), class_name))
-    if _EXTRACTORS.setdefault(language, registered_extractor) != registered_extractor:
-        raise ValueError(f"{repr(language)} is already a registered extractor")
-    if order:
-        _EXTRACTORS.move_to_end(language, last=order == "last")
-    # Instantiate extractor to ensure it can be properly imported
-    try:
-        create_extractor(language)
-    except:
-        logger.error(f"Could not create {repr(language)} extractor")
-        unregister(language)
-        raise
-    logger.info(f"Registered {repr(language)} extractor at {file}::{class_name}")
+    extractor_type: Type[Extractor] = dynamic_import(extractor)
+    language = extractor_type.language()
+    logger.info(f"Registering a {language} extractor at {extractor}")
+    if _EXTRACTORS.setdefault(language.lower(), extractor) != extractor:
+        raise ValueError(
+            f"An extractor is already registered for the {language} language"
+        )
 
 
-def unregister(language: str) -> None:
-    del _EXTRACTORS[language]
-    logger.info(f"Unregistered {repr(language)} extractor")
+def unregister(symbol_or_language: Union[DynamicSymbol, str]) -> None:
+    if isinstance(symbol_or_language, str):
+        key = symbol_or_language
+    else:
+        (key,) = [k for k, v in _EXTRACTORS.items() if v == symbol_or_language]
+    extractor = _EXTRACTORS[key]
+    del _EXTRACTORS[key]
+    logger.info(f"Unregistered {key} extractor at {extractor}")
 
 
 def unregister_all() -> None:
     _EXTRACTORS.clear()
     logger.info("Unregistered all extractors")
-
-
-def set_registered(extractors: Mapping[str, DynamicSymbol]) -> None:
-    """
-    Replaces all existing source code extractors with a new set.
-
-    Parameters:
-        extractors: A mapping from language names to extractor class paths.
-    """
-    unregister_all()
-    for language, symbol in extractors.items():
-        register(language, symbol)
 
 
 class Extractor(ABC):
@@ -178,8 +116,13 @@ class Extractor(ABC):
         """
         pass
 
-    def is_installed(self) -> bool:
+    @staticmethod
+    def is_installed() -> bool:
         return True
+
+    @classmethod
+    def language(cls) -> str:
+        return cls.__name__.replace("Extractor", "")
 
 
 def create_extractor(language: str, *args: Any, **kwargs: Any) -> Extractor:
@@ -198,7 +141,7 @@ def create_extractor(language: str, *args: Any, **kwargs: Any) -> Extractor:
         ExtractorNotFound: If no extractor is registered for the specified language.
     """
     if language in _EXTRACTORS:
-        extractor_class: Type[Extractor] = dynamic_import(_EXTRACTORS[language].symbol)
+        extractor_class: Type[Extractor] = dynamic_import(_EXTRACTORS[language])
         return extractor_class(*args, **kwargs)
     raise ValueError(f'"{language}" is not a registered extractor')
 
@@ -360,3 +303,24 @@ def extract(
 ) -> List[SourceFunction]:
     futures = [extract_directory_task.submit(path, config=config) for path in paths]
     return [function for future in futures for function in future.result()]
+
+
+# Register builtin extractors that are installed
+for extractor in [
+    DynamicSymbol.from_deferred_import("codablellm.languages.c.CExtractor"),
+    DynamicSymbol.from_deferred_import("codablellm.languages.cpp.CPPExtractor"),
+    DynamicSymbol.from_deferred_import("codablellm.languages.java.JavaExtractor"),
+    DynamicSymbol.from_deferred_import(
+        "codablellm.languages.javascript.JavaScriptExtractor"
+    ),
+    DynamicSymbol.from_deferred_import(
+        "codablellm.languages.python_language.PythonExtractor"
+    ),
+    DynamicSymbol.from_deferred_import("codablellm.languages.rust.RustExtractor"),
+    DynamicSymbol.from_deferred_import(
+        "codablellm.languages.typescript.TypeScriptExtractor"
+    ),
+]:
+    extractor_type: Type[Extractor] = dynamic_import(extractor)
+    if extractor_type.is_installed():
+        register(extractor)

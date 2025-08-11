@@ -2,35 +2,31 @@
 The codablellm command line interface.
 """
 
-import json
 import logging
-from enum import Enum
 import os
-from pathlib import Path
 import shlex
-from typing import Dict, Final, List, Optional, Tuple, Union
+from enum import Enum
+from pathlib import Path
+from typing import Final, List, Optional, Type
 
 from click import BadParameter
 from rich import print
 from typer import Argument, Exit, Option, Typer
 
 import codablellm
+import codablellm.logging_config
 from codablellm import container
 from codablellm.core import downloader
 from codablellm.core.decompiler import DecompileConfig
-from codablellm.core.extractor import ExtractConfig
+from codablellm.core.extractor import ExtractConfig, Extractor
 from codablellm.core.utils import (
     CODABLELLM_MAX_WORKERS_ENVIRON_KEY,
     CODABLELLM_PARALLEL_TASKS_ENVIRON_KEY,
-    BuiltinSymbols,
     DynamicSymbol,
 )
-from codablellm.dataset import (
-    DecompiledCodeDatasetConfig,
-    SourceCodeDatasetConfig,
-)
-from codablellm.decompilers.ghidra import Ghidra
-import codablellm.logging_config
+from codablellm.dataset import DecompiledCodeDatasetConfig, SourceCodeDatasetConfig
+from codablellm.decompilers import *
+from codablellm.languages import *
 from codablellm.repoman import ManageConfig
 
 logger = logging.getLogger(__name__)
@@ -132,35 +128,46 @@ def try_create_repo_dir(path: Path) -> Path:
 # Argument/option parsers
 
 
-def parse_builtin_or_dynamic_symbol(
-    param_name: str, value: Union[str, DynamicSymbol], builtin_symbols: BuiltinSymbols
-) -> DynamicSymbol:
-    print(value)
-    raise Exit()
-    if not isinstance(value, str):
-        return value
-    args = shlex.split(value)
-    try:
-        file, symbol = args
-    except ValueError as e1:
-        try:
-            (symbol,) = args
-        except ValueError as e2:
-            raise BadParameter(f"requires 1 or 2 arguments.") from e1
-        else:
-            dynamic_symbol = builtin_symbols.get(symbol)
-            if not dynamic_symbol:
-                raise BadParameter(
-                    f"is not a builtin symbol ({'|'.join(builtin_symbols)})."
-                ) from e1
-            return dynamic_symbol
+def parse_builtin_or_dynamic_symbol(value: str) -> DynamicSymbol:
+    # Check for common classes/functions for decompilers/extractors/mappers
+    def verify_language_support(extractor_type: Type[Extractor], extra: str) -> None:
+        if not extractor_type.is_installed():
+            raise BadParameter(
+                f'{extractor_type.language()} language support requires the "{extra}" extra to be installed. '
+                f'Install with "pip install codablellm[{extra}]" or "pip install codablellm[langs]" to '
+                "install support for all languages."
+            )
+
+    value = value.lower()
+    if value == "ghidra":
+        symbol = DynamicSymbol.from_builtin_symbol(Ghidra)
+    elif value == "c":
+        symbol = DynamicSymbol.from_builtin_symbol(CExtractor)
+    elif value == "c++":
+        symbol = DynamicSymbol.from_builtin_symbol(CPPExtractor)
+    elif value == "java":
+        symbol = DynamicSymbol.from_builtin_symbol(JavaExtractor)
+        verify_language_support(JavaExtractor, "java")
+    elif value == "javascript":
+        symbol = DynamicSymbol.from_builtin_symbol(JavaScriptExtractor)
+        verify_language_support(JavaExtractor, "javascript")
+    elif value == "python":
+        symbol = DynamicSymbol.from_builtin_symbol(PythonExtractor)
+        verify_language_support(JavaExtractor, "python")
+    elif value == "rust":
+        symbol = DynamicSymbol.from_builtin_symbol(RustExtractor)
+        verify_language_support(JavaExtractor, "rust")
+    elif value == "typescript":
+        symbol = DynamicSymbol.from_builtin_symbol(TypeScriptExtractor)
+        verify_language_support(JavaExtractor, "typescript")
     else:
-        file = Path(file)
-        if not file.exists():
-            raise BadParameter(f"{file} is does not exist.")
-        elif not file.is_file():
-            raise BadParameter(f"{file} is not a file.")
-        return (Path(file), symbol)
+        try:
+            symbol = DynamicSymbol.from_str(value)
+        except ValueError as e:
+            raise BadParameter(
+                "Class/function must be in the format of 'path/to/file.py::ClassOrFunction'"
+            ) from e
+    return symbol
 
 
 # Arguments
@@ -217,6 +224,14 @@ CLEANUP: Final[Optional[str]] = Option(
     "cleaned up after the dataset is created, using the value of "
     "this option as the build command.",
 )
+CLEAR_EXTRACTORS: Final[bool] = Option(
+    False,
+    "--clear-extractors",
+    help="Unregister all builtin extractors.",
+    callback=codablellm.extractor.unregister_all,
+    parser=parse_builtin_or_dynamic_symbol,
+    metavar="SYMBOL",
+)
 CONTAINERIZE: Final[bool] = Option(
     False,
     "--containerize / --local",
@@ -232,11 +247,10 @@ DECOMPILE: Final[bool] = Option(
     "argument and add decompiled code to the dataset.",
 )
 DECOMPILER: Final[DynamicSymbol] = Option(
-    codablellm.decompiler._decompiler.symbol,
-    dir_okay=False,
-    exists=True,
+    str(codablellm.decompiler.get()),
     help="Decompiler to use.",
-    metavar=f"<FILE CLASS>",
+    parser=parse_builtin_or_dynamic_symbol,
+    metavar="SYMBOL",
 )
 DEBUG: Final[bool] = Option(
     False, "--debug", callback=toggle_debug_logging, hidden=True
@@ -256,13 +270,6 @@ EXCLUSIVE_SUBPATH: Final[Optional[List[Path]]] = Option(
     help="Path relative to the repository "
     "directory to exclusively include in the dataset "
     "generation.",
-)
-EXTRACTORS: Final[Optional[Tuple[ExtractorConfigOperation, Path]]] = Option(
-    None,
-    dir_okay=False,
-    exists=True,
-    metavar="<[prepend|append|set] FILE>",
-    help="Order of extractors to use, including custom ones.",
 )
 EXTRA_PATH: Final[List[Path]] = Option(
     [],
@@ -308,10 +315,9 @@ CLEANUP_ERROR_HANDLING: Final[CommandErrorHandler] = Option(
     "prompting the user for manual intervention.",
 )
 MAPPER: Final[DynamicSymbol] = Option(
-    DEFAULT_DECOMPILED_CODE_DATASET_CONFIG.mapper,
-    dir_okay=False,
-    exists=True,
-    metavar="<FILE FUNCTION>",
+    str(DEFAULT_DECOMPILED_CODE_DATASET_CONFIG.mapper),
+    parser=parse_builtin_or_dynamic_symbol,
+    metavar="SYMBOL",
     help="Mapper to use for mapping decompiled functions to source code functions.",
 )
 MAX_WORKERS: Final[Optional[int]] = Option(
@@ -361,9 +367,8 @@ TRANSFORM: Final[Optional[DynamicSymbol]] = Option(
     DEFAULT_SOURCE_CODE_DATASET_CONFIG.extract_config.transform,
     "--transform",
     "-t",
-    dir_okay=False,
-    exists=True,
-    metavar="<FILE FUNCTION>",
+    parser=parse_builtin_or_dynamic_symbol,
+    metavar="SYMBOL",
     help="Transformation function to use when extracting source code functions.",
 )
 RECURSIVE: Final[bool] = Option(
@@ -371,6 +376,14 @@ RECURSIVE: Final[bool] = Option(
     "--recursive",
     "-r",
     help="Recursively search for binaries in the specified bins directories.",
+)
+REGISTER_EXTRACTOR: Final[Optional[List[DynamicSymbol]]] = Option(
+    [],
+    "--register-extractor",
+    "-R",
+    parser=parse_builtin_or_dynamic_symbol,
+    metavar="SYMBOL",
+    help="Additional extractor to register.",
 )
 RUN_FROM: Final[RunFrom] = Option(
     DEFAULT_MANAGE_CONFIG.run_from,
@@ -404,17 +417,16 @@ def command(
     cleanup_error_handling: CommandErrorHandler = CLEANUP_ERROR_HANDLING,
     containerize: bool = CONTAINERIZE,
     checkpoint: int = CHECKPOINT,
-    debug: bool = DEBUG,
+    _debug: bool = DEBUG,
     decompile: bool = DECOMPILE,
     decompiler: DynamicSymbol = DECOMPILER,
     exclude_subpath: Optional[List[Path]] = EXCLUDE_SUBPATH,
     exclusive_subpath: Optional[List[Path]] = EXCLUSIVE_SUBPATH,
-    extractors: Optional[Tuple[ExtractorConfigOperation, Path]] = EXTRACTORS,
     extra_path: List[Path] = EXTRA_PATH,
     generation_mode: GenerationMode = GENERATION_MODE,
     git: bool = GIT,
-    ghidra: Optional[Path] = GHIDRA,
-    ghidra_script: Path = GHIDRA_SCRIPT,
+    _ghidra: Optional[Path] = GHIDRA,
+    _ghidra_script: Path = GHIDRA_SCRIPT,
     mapper: DynamicSymbol = MAPPER,
     max_workers: Optional[int] = MAX_WORKERS,
     parallel: bool = PARALLEL,
@@ -425,8 +437,8 @@ def command(
     transform: Optional[DynamicSymbol] = TRANSFORM,
     use_checkpoint: Optional[bool] = USE_CHECKPOINT,
     url: str = URL,
-    verbose: bool = VERBOSE,
-    version: bool = VERSION,
+    _verbose: bool = VERBOSE,
+    _version: bool = VERSION,
 ) -> None:
     """
     Creates a code dataset from a local repository.
@@ -436,28 +448,7 @@ def command(
         return
     if decompiler != codablellm.decompiler.get().symbol:
         # Configure decompiler
-        codablellm.decompiler.set(f"(CLI-Set) {decompiler[1]}", decompiler)
-    if extractors:
-        # Configure function extractors
-        operation, config_file = extractors
-        try:
-            # Load JSON file containing extractors
-            configured_extractors: Dict[str, DynamicSymbol] = json.loads(
-                Path.read_text(config_file)
-            )
-        except json.JSONDecodeError as e:
-            raise BadParameter(
-                "Could not decode extractor configuration file.",
-                param_hint="--extractors",
-            ) from e
-        if operation == ExtractorConfigOperation.SET:
-            codablellm.extractor.set_registered(configured_extractors)
-        else:
-            for language, symbol in configured_extractors.items():
-                order = (
-                    "last" if operation == ExtractorConfigOperation.APPEND else "first"
-                )
-                codablellm.extractor.register(language, symbol, order=order)
+        codablellm.decompiler.set(decompiler)
     if url:
         # Download remote repository
         if git:

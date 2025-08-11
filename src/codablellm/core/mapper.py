@@ -1,7 +1,6 @@
-from pathlib import Path
-from typing import Callable, Final, Tuple, Union
+from typing import Callable, Final, Union
 from codablellm.core.function import DecompiledFunction, SourceFunction
-from codablellm.core.utils import BuiltinSymbols, DynamicSymbol
+from codablellm.core.utils import DynamicSymbol
 
 
 def name_mapper(function: DecompiledFunction, uid: Union[SourceFunction, str]) -> bool:
@@ -55,19 +54,7 @@ corresponds to a given source function.
 """
 
 
-def _create_builtin_symbol(mapper: Mapper) -> Tuple[str, DynamicSymbol]:
-    return mapper.__name__, (Path(__file__), mapper.__name__)
-
-
-BUILTIN_MAPPERS: Final[BuiltinSymbols] = dict(
-    [
-        _create_builtin_symbol(default_mapper),
-        _create_builtin_symbol(name_mapper),
-        _create_builtin_symbol(rust_linux_mapper),
-    ]
-)
-
-DEFAULT_MAPPER: Final[DynamicSymbol] = BUILTIN_MAPPERS["default_mapper"]
+DEFAULT_MAPPER: Final[DynamicSymbol] = DynamicSymbol.from_builtin_symbol(default_mapper)
 """
 The default mapping function used to match decompiled functions to source functions.
 """

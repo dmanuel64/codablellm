@@ -2,6 +2,7 @@
 Core utility functions for codablellm.
 """
 
+from dataclasses import dataclass
 import importlib
 import json
 import logging
@@ -610,14 +611,51 @@ def prepared_dir(
             os.environ.pop(REBASED_DIR_ENVIRON_KEY, None)
 
 
-DynamicSymbol = Tuple[Path, str]
+@dataclass
+class DynamicSymbol:
+    path: Path
+    symbol: str
+
+    def __hash__(self) -> int:
+        return hash((self.path, self.symbol))
+
+    def __str__(self) -> str:
+        return f"{self.path}::{self.symbol}"
+
+    @staticmethod
+    def package_root() -> Path:
+        return Path(__file__).parent.parent.parent
+
+    @classmethod
+    def from_str(cls, import_str: str) -> "DynamicSymbol":
+        try:
+            file, symbol = import_str.split("::", maxsplit=1)
+        except ValueError as e:
+            raise ValueError(
+                'Import string must be in the format of "path/to/file.py::ClassOrFunction"'
+            ) from e
+        return cls(Path(file), symbol)
+
+    @classmethod
+    def from_deferred_import(cls, import_str: str) -> "DynamicSymbol":
+        module, symbol = import_str.rsplit(".", maxsplit=1)
+        path = cls.package_root()
+        for module_segment in module.split("."):
+            path /= module_segment
+        return cls.from_str(f"{path}::{symbol}")
+
+    @classmethod
+    def from_builtin_symbol(cls, symbol: Union[Type[Any], Callable]) -> "DynamicSymbol":
+        return cls.from_deferred_import(f"{symbol.__module__}.{symbol.__name__}")
 
 
 def dynamic_import(dynamic_symbol: DynamicSymbol) -> Any:
-    file, symbol = dynamic_symbol
-    file = Path(file)
+    DynamicSymbol.from_builtin_symbol(dynamic_import)
+    file = Path(dynamic_symbol.path)
+    symbol = dynamic_symbol.symbol
     # Add parent directory to sys.path to allow for dynamic imports of extractors and mappers
-    sys.path.insert(0, str(file.parent))
+    if str(file.parent) not in sys.path:
+        sys.path.insert(0, str(file.parent))
     try:
         module = importlib.import_module(file.stem)
         return getattr(module, symbol)

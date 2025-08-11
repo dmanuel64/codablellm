@@ -69,7 +69,8 @@ class TypeScriptExtendedExtractor(TreeSitterExtractor):
     def get_language(self) -> Language:
         return Language(tst.language_tsx())  # type: ignore
 
-    def is_installed(self) -> bool:
+    @staticmethod
+    def is_installed() -> bool:
         return tst is not None
 
 
@@ -103,5 +104,6 @@ class TypeScriptExtractor(TreeSitterExtractor):
     def get_language(self) -> Language:
         return Language(tst.language_typescript())  # type: ignore
 
-    def is_installed(self) -> bool:
+    @staticmethod
+    def is_installed() -> bool:
         return tst is not None
