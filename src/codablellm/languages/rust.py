@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Final, Optional, Sequence, Set
+from typing import Final, Set
 
 try:
     import tree_sitter_rust as tsr
@@ -8,7 +8,6 @@ except ModuleNotFoundError:
 
 from tree_sitter import Language
 
-from codablellm.core.function import SourceFunction
 from codablellm.core.utils import PathLike, requires_extra
 from codablellm.languages.common import TreeSitterExtractor, rglob_file_extensions
 
@@ -43,5 +42,6 @@ class RustExtractor(TreeSitterExtractor):
     def get_language(self) -> Language:
         return Language(tsr.language())  # type: ignore
 
-    def is_installed(self) -> bool:
+    @staticmethod
+    def is_installed() -> bool:
         return tsr is not None

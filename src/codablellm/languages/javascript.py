@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Final, Optional, Sequence, Set
+from typing import Final, Set
 
 try:
     import tree_sitter_javascript as tsjs
@@ -8,7 +8,6 @@ except ModuleNotFoundError:
 
 from tree_sitter import Language
 
-from codablellm.core.function import SourceFunction
 from codablellm.core.utils import PathLike, requires_extra
 from codablellm.languages.common import TreeSitterExtractor, rglob_file_extensions
 
@@ -60,5 +59,6 @@ class JavaScriptExtractor(TreeSitterExtractor):
     def get_language(self) -> Language:
         return Language(tsjs.language())  # type: ignore
 
-    def is_installed(self) -> bool:
+    @staticmethod
+    def is_installed() -> bool:
         return tsjs is not None

@@ -18,7 +18,6 @@ from typing import (
     List,
     Literal,
     Mapping,
-    NamedTuple,
     Optional,
     Sequence,
     Type,
@@ -30,7 +29,6 @@ from codablellm.core.function import DecompiledFunction
 from codablellm.core.utils import (
     CODABLELLM_MAX_WORKERS_ENVIRON_KEY,
     ASTEditor,
-    BuiltinSymbols,
     DynamicSymbol,
     PathLike,
     codablellm_flow,
@@ -44,48 +42,24 @@ from codablellm.languages.c import CExtractor
 logger = logging.getLogger(__name__)
 
 
-class RegisteredDecompiler(NamedTuple):
-    name: str
-    symbol: DynamicSymbol
+_decompiler: DynamicSymbol
 
 
-BUILTIN_SYMBOLS: Final[BuiltinSymbols] = {
-    "Ghidra": (Path(__file__).parent.parent / "decompilers" / "ghidra.py", "Ghidra"),
-    "Angr": (
-        Path(__file__).parent.parent / "decompilers" / "angr_decompiler.py",
-        "Angr",
-    ),
-}
-
-_decompiler: RegisteredDecompiler = RegisteredDecompiler(
-    "Ghidra", BUILTIN_SYMBOLS["Ghidra"]
-)
-
-
-def set(name: str, symbol: DynamicSymbol) -> None:
+def set(decompiler: DynamicSymbol) -> None:
     """
     Sets the decompiler used by `codablellm`.
 
     Parameters:
-        name: The display name of the decompiler (e.g., "Ghidra", "Angr").
         symbol: A tuple containing the file path and class name of the decompiler implementation.
     """
 
     global _decompiler
-    file, class_name = symbol
-    old_decompiler = _decompiler
-    _decompiler = RegisteredDecompiler(name, (Path(file), class_name))
-    # Instantiate decompiler to ensure it can be properly imported
-    try:
-        create_decompiler()
-    except:
-        logger.error(f"Could not create {repr(name)} extractor")
-        _decompiler = old_decompiler
-        raise
-    logger.info(f"Using {repr(name)} ({file}::{class_name}) as the decompiler")
+    decompiler_type: Type[Decompiler] = dynamic_import(decompiler)
+    logger.info(f"Using {repr(decompiler_type.name)} as the decompiler")
+    _decompiler = decompiler
 
 
-def get() -> RegisteredDecompiler:
+def get() -> DynamicSymbol:
     """
     Returns the currently registered decompiler.
 
@@ -239,7 +213,10 @@ class Decompiler(ABC):
             return combined
         logger.debug(f"Utilizing pseudo-strip strategy for {repr(path)}")
         return [pseudo_strip(self, function) for function in self.decompile(path)]
-        # strip, decompile again, and return the stripped functions
+
+    @classmethod
+    def name(cls) -> str:
+        return cls.__name__
 
 
 def create_decompiler(*args: Any, **kwargs: Any) -> Decompiler:
@@ -256,7 +233,7 @@ def create_decompiler(*args: Any, **kwargs: Any) -> Decompiler:
     Raises:
         DecompilerNotFound: If the specified decompiler cannot be imported or if the class cannot be found.
     """
-    decompiler_class: Type[Decompiler] = dynamic_import(_decompiler.symbol)
+    decompiler_class: Type[Decompiler] = dynamic_import(_decompiler)
     return decompiler_class(*args, **kwargs)
 
 
@@ -355,7 +332,7 @@ def decompile_bins_task(
     # Create decompiler
     decompiler = create_decompiler(*config.decompiler_args, **config.decompiler_kwargs)
     # Submit decompile tasks
-    logger.info(f"Submitting {get().name} decompile tasks...")
+    logger.info(f"Submitting {decompiler.name()} decompile tasks...")
     futures = [
         decompile_task.submit(decompiler, bin, config.symbol_remover, return_state=True)
         for bin in bins
@@ -384,3 +361,7 @@ def decompile(
     """
     flow = codablellm_flow if as_flow else lambda: lambda x: x.fn
     return flow()(decompile_bins_task)(*paths, config=config)
+
+
+# Set Ghidra as default decompiler
+set(DynamicSymbol.from_deferred_import("codablellm.decompilers.Ghidra"))

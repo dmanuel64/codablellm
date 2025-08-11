@@ -1,10 +1,9 @@
 from pathlib import Path
-from typing import Final, Optional, Sequence, Set
+from typing import Final, Set
 
 import tree_sitter_cpp as tscpp
 from tree_sitter import Language
 
-from codablellm.core.function import SourceFunction
 from codablellm.core.utils import PathLike
 from codablellm.languages.common import TreeSitterExtractor, rglob_file_extensions
 
@@ -48,3 +47,7 @@ class CPPExtractor(TreeSitterExtractor):
 
     def get_language(self) -> Language:
         return Language(tscpp.language())
+
+    @classmethod
+    def language(cls) -> str:
+        return "C++"

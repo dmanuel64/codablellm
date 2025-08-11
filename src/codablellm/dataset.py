@@ -367,7 +367,7 @@ class DecompiledCodeDatasetConfig:
     """
     Configuration settings for decompiling binaries.
     """
-    mapper: utils.DynamicSymbol = DEFAULT_MAPPER
+    mapper: utils.DynamicSymbol = field(default_factory=lambda: DEFAULT_MAPPER)
     """
     The mapping function used to determine if a decompiled function corresponds to a given source function.
     """
