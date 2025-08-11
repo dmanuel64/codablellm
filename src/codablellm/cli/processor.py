@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Type
+from typing import Any, Dict, Type
 
 from typer import BadParameter, Exit
 
@@ -85,3 +85,6 @@ def show_version(show: bool) -> None:
     if show:
         print(f"[b]codablellm {codablellm.__version__}")
         raise Exit()
+    
+def validate_parameters(params: Dict[str, Any]) -> None:
+    pass

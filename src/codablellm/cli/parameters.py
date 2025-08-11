@@ -77,8 +77,8 @@ BuildOpt = Annotated[
         "-b",
         metavar="COMMAND",
         rich_help_panel="Repository Options",
-        help="If --decompile is specified, the repository will be "
-        "built using the value of this option as the build command.",
+        help="If *--decompile* is specified, the repository will be "
+        "built using the value of this option as the build command. :hammer_and_wrench:",
     ),
 ]
 BuildErrorHandlerOpt = Annotated[
@@ -100,9 +100,9 @@ CleanupOpt = Annotated[
         "-c",
         metavar="COMMAND",
         rich_help_panel="Repository Options",
-        help="If --decompile is specified, the repository will be "
+        help="If *--decompile* is specified, the repository will be "
         "cleaned up after the dataset is created, using the value of "
-        "this option as the build command.",
+        "this option as the build command. :broom:",
     ),
 ]
 CleanupErrorHandlerOpt = Annotated[
@@ -132,7 +132,7 @@ ContainerizeOpt = Annotated[
         ...,
         "--containerize / --local",
         "-C / -l",
-        help="Run inside a Docker container instead of the local environment.",
+        help="Run inside a Docker container instead of the local environment. :whale:",
     ),
 ]
 DecompileOpt = Annotated[
@@ -143,7 +143,7 @@ DecompileOpt = Annotated[
         "-d / -s",
         rich_help_panel="Decompiler Options",
         help="If the language supports decompiled code mapping, use "
-        "--decompiler to decompile the binaries specified by the bins "
+        "*--decompiler* to decompile the binaries specified by the bins "
         "argument and add decompiled code to the dataset.",
     ),
 ]
@@ -191,7 +191,7 @@ GhidraOpt = Annotated[
         dir_okay=False,
         # callback=lambda v: Ghidra.set_path(v) if v else None,
         rich_help_panel="Ghidra Options",
-        help="Path to Ghidra's analyzeHeadless command.",
+        help="Path to Ghidra's `analyzeHeadless` command.",
     ),
 ]
 GhidraScriptOpt = Annotated[
@@ -211,7 +211,7 @@ GitOpt = Annotated[
         ...,
         "--git / --archive",
         rich_help_panel='Download Options',
-        help="Determines whether --url is a Git "
+        help="Determines whether *--url* is a Git "
         "download URL or a tarball/zipfile download URL.",
     ),
 ]

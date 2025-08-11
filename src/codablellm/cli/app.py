@@ -22,7 +22,11 @@ DEFAULT_DECOMPILED_CODE_DATASET_CONFIG: Final[DecompiledCodeDatasetConfig] = (
 app = Typer(rich_markup_mode="markdown")
 
 
-@app.command()
+@app.command(
+    epilog="""
+    For more information, visit the [CodableLLM docs website](https://codablellm.readthedocs.io/)
+    """
+)
 def command(
     repo: parameters.RepoArg,
     save_as: parameters.SaveAsArg,
@@ -56,15 +60,9 @@ def command(
     _version: parameters.VersionOpt = False,
 ):
     """
-    **Create** a new *shinny* user. :sparkles:
+    **CodableLLM**
 
-    * Create a username
-
-    * Show that the username is created
-
-    ---
-
-    Learn more at the [Typer docs website](https://typer.tiangolo.com)
+    Creates a code dataset from a repository. :floppy_disk:
     """
     print(locals())
     user_input = "[blink]Gotcha![/blink]"
