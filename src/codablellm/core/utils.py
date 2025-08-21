@@ -383,7 +383,7 @@ Command = List[str]
 A CLI command.
 """
 
-CommandErrorHandler = Literal["interactive", "ignore", "none"]
+CommandErrorHandler = Optional[Literal["interactive", "ignore"]]
 """
 Defines the strategies for handling errors encountered during the execution of a CLI command.
 
@@ -420,7 +420,7 @@ def record_stream(stream: IO[str], log_func: Callable, store_list: List[str]) ->
 
 def execute_command(
     command: Command,
-    error_handler: CommandErrorHandler = "none",
+    error_handler: CommandErrorHandler = None,
     task: Optional[str] = None,
     cwd: Optional[PathLike] = None,
     output_handler: Literal["log", "pipe", "show"] = "log",
@@ -667,9 +667,6 @@ def dynamic_import(dynamic_symbol: DynamicSymbol) -> Any:
         if e.name == symbol:
             raise ValueError(f"Cannot find {repr(symbol)} in {repr(file.name)}") from e
         raise
-
-
-BuiltinSymbols = Mapping[str, DynamicSymbol]
 
 
 def benchmark_task(

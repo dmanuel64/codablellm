@@ -347,7 +347,7 @@ def decompile_bins_task(
 
 
 def decompile(
-    *paths: PathLike, config: DecompileConfig, as_flow: bool = True
+    *paths: PathLike, config: DecompileConfig = DecompileConfig(), as_flow: bool = True
 ) -> List[DecompiledFunction]:
     """
     Decompiles one or more binaries.

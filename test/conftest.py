@@ -1,28 +1,14 @@
+import inspect
+import json
 from pathlib import Path
 import platform
-from typing import Callable, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import pytest
 
 from codablellm.core.decompiler import Decompiler
 from codablellm.core.function import DecompiledFunction, SourceFunction
 from codablellm.core.utils import DynamicSymbol, PathLike
-
-
-@pytest.fixture
-def dummy_decompiled_function(tmp_path: Path) -> DecompiledFunction:
-    """
-    Provides a reusable mock `DecompiledFunction` instance used across multiple tests.
-    """
-    return DecompiledFunction(
-        uid="test",
-        path=tmp_path.with_name("test.exe"),
-        name="test_function",
-        definition="int test() { return 0; }",
-        assembly="test: mov eax, 0",
-        architecture="x86_64",
-        address=0x400080,
-    )
 
 
 @pytest.fixture
@@ -95,14 +81,20 @@ def create_compiled_functions_factory(create_function_factory) -> Callable[
             {
                 "path": str(bin_path),
                 "name": name,
-                "definition": "...",
+                "definition": definition,
                 "assembly": "...",
                 "architecture": platform.machine(),
                 "address": 0x1000,
             }
         )
-        with open(bin_path, "a") as bin_file:
-            bin_file.write(str(decompiled_function.to_json()))
+        bin_path.touch()
+        with open(bin_path, "r+") as bin_file:
+            try:
+                bin_funcs: List[Dict[str, Any]] = json.load(bin_file)
+            except json.JSONDecodeError:
+                bin_funcs = []
+            bin_funcs.append(decompiled_function.to_json())  # type: ignore
+            json.dump(bin_funcs, bin_file)
         return (
             source_function,
             decompiled_function,
@@ -111,47 +103,22 @@ def create_compiled_functions_factory(create_function_factory) -> Callable[
     return create_compiled_functions
 
 
-@pytest.fixture
-def mock_decompiler(
-    dummy_decompiled_function: DecompiledFunction,
-) -> Decompiler:
+class MockDecompiler(Decompiler):
+    def decompile(self, path: PathLike) -> Sequence[DecompiledFunction]:
+        with open(path, "r") as bin_file:
+            bin_funcs: List[Dict[str, Any]] = json.load(bin_file)
+            return [
+                DecompiledFunction.from_json(bin_func) for bin_func in bin_funcs  # type: ignore
+            ]
+
+    def get_stripped_function_name(self, address: int) -> str:
+        return f"FUN_{address:X}"
+
+
+@pytest.fixture()
+def mock_decompiler() -> DynamicSymbol:
     """
     Provides a mock decompiler class for testing
     """
 
-    class MockDecompiler(Decompiler):
-        def decompile(self, path: PathLike) -> Sequence[DecompiledFunction]:
-            return [dummy_decompiled_function]
-
-        def get_stripped_function_name(self, address: int) -> str:
-            return f"FUN_{address:X}"
-
-    return MockDecompiler()
-
-
-@pytest.fixture
-def dummy_c_file(tmp_path: Path) -> Path:
-    """
-    Provides a reusable C source code file used across multiple tests.
-    """
-    tmp_path = tmp_path / "test.c"
-    tmp_path.write_text("int test() { return 0; }")
-    return tmp_path
-
-
-@pytest.fixture
-def dummy_transform_symbol(tmp_path: Path) -> DynamicSymbol:
-    """
-    Provides a reusable Python file with a transform used across multiple tests.
-    """
-    tmp_path = tmp_path / "transform.py"
-    tmp_path.write_text(
-        (
-            "def dummy_transform(sf):"
-            "return sf.with_definition("
-            '    "int transformed_function(int arg) { return 1; }",'
-            '    name="transformed_function",'
-            ")"
-        )
-    )
-    return (tmp_path, "dummy_transform")
+    return DynamicSymbol.from_str(f"{__file__}::{MockDecompiler.__name__}")

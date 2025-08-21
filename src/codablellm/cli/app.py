@@ -1,9 +1,11 @@
+import inspect
 from typing import Final
 from typer import Typer
 
 from rich import print
 
-from codablellm.cli import parameters
+from codablellm.cli import parameters, runner
+from codablellm.cli.config import CLIConfig
 from codablellm.core import decompiler
 from codablellm.dataset import DecompiledCodeDatasetConfig, SourceCodeDatasetConfig
 from codablellm.decompilers.ghidra import Ghidra
@@ -32,9 +34,9 @@ def command(
     save_as: parameters.SaveAsArg,
     bins: parameters.BinsArg = None,
     build: parameters.BuildOpt = None,
-    build_error_handler: parameters.BuildErrorHandlerOpt = DEFAULT_MANAGE_CONFIG.build_error_handling,  # type: ignore
+    build_error_handling: parameters.BuildErrorHandlerOpt = DEFAULT_MANAGE_CONFIG.build_error_handling,  # type: ignore
     cleanup: parameters.CleanupOpt = DEFAULT_MANAGE_CONFIG.cleanup_command,  # type: ignore
-    cleanup_error_handler: parameters.CleanupErrorHandlerOpt = DEFAULT_MANAGE_CONFIG.cleanup_error_handling,  # type: ignore
+    cleanup_error_handling: parameters.CleanupErrorHandlerOpt = DEFAULT_MANAGE_CONFIG.cleanup_error_handling,  # type: ignore
     clear_extractors: parameters.ClearExtractorsOpt = False,
     containerize: parameters.ContainerizeOpt = False,
     decompile: parameters.DecompileOpt = False,
@@ -64,6 +66,5 @@ def command(
 
     Creates a code dataset from a repository. :floppy_disk:
     """
-    print(locals())
-    user_input = "[blink]Gotcha![/blink]"
-    print(user_input)
+    config = CLIConfig.from_locals(**locals())
+    runner.run(config)
