@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use CodableLLM, please cite this work."
+title: "CodableLLM: Automating Decompiled and Source Code Mapping for LLM Dataset Generation"
+authors:
+  - family-names: "Manuel"
+    given-names: "Dylan"
+    orcid: "https://orcid.org/0009-0008-2043-3678"
+  - family-names: "Rad"
+    given-names: "Paul"
+abstract: "The generation of large, high-quality datasets for code understanding and generation remains a significant challenge, particularly when aligning decompiled binaries with their original source code. To address this, we present CodableLLM, a Python framework designed to automate the creation and curation of datasets by mapping decompiled functions to their corresponding source functions. This process enhances the alignment between decompiled and source code representations, facilitating the development of large language models (LLMs) capable of understanding and generating code across multiple abstraction levels. CodableLLM supports multiple programming languages and integrates with existing decompilers and parsers to streamline dataset generation. This paper presents the design and implementation of CodableLLM, evaluates its performance in dataset creation, and compares it to existing tools in the field. The results demonstrate that CodableLLM offers a robust and efficient solution for generating datasets tailored for code-focused LLMS."
+keywords:
+  - "LLM dataset generation"
+  - "decompiled code"
+  - "source code mapping"
+  - "software engineering"
+license: "MIT"
+version: "1.3.2"
+date-released: "2025-07-02"
+repository-code: "https://github.com/dmanuel64/codablellm"
+doi: "https://doi.org/10.48550/arXiv.2507.22066"
+url: "https://codablellm.readthedocs.io/"
