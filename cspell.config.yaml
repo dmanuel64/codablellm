@@ -1,0 +1,16 @@
+version: "0.2"
+ignorePaths:
+  - target/**
+  - "**/*.lock"
+  - .venv/**
+  - dist/**
+dictionaryDefinitions: []
+dictionaries:
+  - python
+  - rust
+words:
+  - cdylib
+  - codablellm
+  - maturin
+ignoreWords: []
+import: []
