@@ -1,3 +1,7 @@
 [workspace]
 members = ["crates/codablellm", "crates/codablellm-pyo3"]
 resolver = "2"
+
+[workspace.package]
+version = "2.0.0"
+edition = "2024"

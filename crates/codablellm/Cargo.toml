@@ -1,9 +1,13 @@
 [package]
 name = "codablellm"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [lib]
 name = "codablellm"
 
 [dependencies]
+bollard = "0.21"
+directories = "6"
+rayon = "1"
+reqwest = { version = "0.13", features = ["blocking", "stream"] }
