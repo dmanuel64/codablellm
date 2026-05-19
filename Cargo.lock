@@ -7,7 +7,7 @@ name = "codablellm"
 version = "0.1.0"
 
 [[package]]
-name = "codablellm-py"
+name = "codablellm-pyo3"
 version = "0.1.0"
 dependencies = [
  "codablellm",

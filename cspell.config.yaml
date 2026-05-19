@@ -12,5 +12,7 @@ words:
   - cdylib
   - codablellm
   - maturin
+  - pyfunction
+  - pymodule
 ignoreWords: []
 import: []

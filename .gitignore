@@ -171,3 +171,6 @@ src/transform_test.py
 # Added by cargo
 
 /target
+
+# Maturin
+*.pdb

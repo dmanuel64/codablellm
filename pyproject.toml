@@ -12,11 +12,9 @@ build-backend = "maturin"
 
 [tool.maturin]
 module-name = "codablellm._core"
-manifest-path = "crates/py/Cargo.toml"
-python-source = "python"
+manifest-path = "crates/codablellm-pyo3/Cargo.toml"
+python-source = "python/src"
 features = ["pyo3/extension-module"]
 
-[tool.uv.workspace]
-members = [
-    "foo",
-]
+[dependency-groups]
+dev = ["maturin>=1.13.3"]

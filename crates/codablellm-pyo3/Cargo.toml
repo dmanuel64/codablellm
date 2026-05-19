@@ -1,5 +1,5 @@
 [package]
-name = "codablellm-py"
+name = "codablellm-pyo3"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,5 +8,5 @@ name = "_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-codablellm = { path = "../core" }
+codablellm = { path = "../codablellm" }
 pyo3 = { version = "0.28", features = ["extension-module"] }
