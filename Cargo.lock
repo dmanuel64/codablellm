@@ -138,6 +138,7 @@ dependencies = [
  "directories",
  "rayon",
  "reqwest",
+ "thiserror",
 ]
 
 [[package]]
