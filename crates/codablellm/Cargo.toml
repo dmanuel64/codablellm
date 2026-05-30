@@ -7,8 +7,14 @@ edition.workspace = true
 name = "codablellm"
 
 [dependencies]
+anyhow = "1"
 bollard = "0.21"
 directories = "6"
+flate2 = "1"
+indicatif = "0.18"
 rayon = "1"
 reqwest = { version = "0.13", features = ["blocking", "stream"] }
-thiserror = "2.0.18"
+strum = { version = "0.28", features = ["derive"] }
+tar = "0.4"
+tempfile = "3"
+thiserror = "2"
