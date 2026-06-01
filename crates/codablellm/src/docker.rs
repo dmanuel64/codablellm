@@ -3,11 +3,11 @@ use std::{
     sync::LazyLock,
 };
 
-use crate::config;
+use bollard::{Docker, plugin::ExecConfig};
+use tempfile::tempdir;
 
-pub static VOLUME_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-    config::APP_DIRS
-        .runtime_dir()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| std::env::temp_dir().join("codablellm"))
-});
+pub async fn foo() {
+    let docker = Docker::connect_with_defaults().unwrap();
+    docker.create_volume(config)
+    docker.create_exec(container_name, ExecConfig)
+}

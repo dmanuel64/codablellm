@@ -11,9 +11,12 @@ dictionaries:
 words:
   - cdylib
   - codablellm
+  - flate
+  - indicatif
   - maturin
   - pyfunction
   - pymodule
   - reqwest
+  - thiserror
 ignoreWords: []
 import: []

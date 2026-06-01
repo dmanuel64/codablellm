@@ -5,6 +5,8 @@ pub mod decompiler;
 pub(crate) mod docker;
 mod errors;
 pub mod extractor;
+pub mod function;
+pub mod languages;
 pub mod mapper;
 pub mod pipeline;
 pub mod repo;

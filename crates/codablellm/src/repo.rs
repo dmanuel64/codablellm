@@ -6,14 +6,48 @@ use std::{
 };
 
 use flate2::read::GzDecoder;
+use glob::glob;
 use indicatif::ProgressBar;
+use strum::IntoEnumIterator;
 use tar::Archive;
 use tempfile::tempfile;
 
-use crate::config;
+use crate::{config, languages::Language};
 
 static LOCAL_REPO_ROOT: LazyLock<PathBuf> =
     LazyLock::new(|| config::APP_DIRS.cache_dir().join("repos"));
+
+pub struct Repo {
+    path: PathBuf,
+    pub target_languages: Vec<Language>,
+}
+
+impl Repo {
+    pub fn new(path: PathBuf) -> Self {
+        let target_languages = Language::iter().collect();
+        Self {
+            path,
+            target_languages,
+        }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn source_files(&self) -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+        for ext in self
+            .target_languages
+            .iter()
+            .flat_map(|l| l.file_extensions())
+        {
+            let pattern = format!("{}/**/*.{}", self.path.display(), ext);
+            paths.extend(glob(&pattern).unwrap().flatten());
+        }
+        paths
+    }
+}
 
 pub struct Options {
     pub display_progress: bool,
@@ -29,11 +63,11 @@ impl Default for Options {
     }
 }
 
-pub fn pull(repo_url: &str) -> Result<PathBuf, crate::Error> {
+pub fn pull(repo_url: &str) -> Result<Repo, crate::Error> {
     pull_with_options(repo_url, Options::default())
 }
 
-pub fn pull_with_options(repo_url: &str, options: Options) -> Result<PathBuf, crate::Error> {
+pub fn pull_with_options(repo_url: &str, options: Options) -> Result<Repo, crate::Error> {
     // TODO: check if zipfile or tarfile
     let local_repo_archive = tempfile()?;
     fetch(
@@ -48,7 +82,7 @@ pub fn pull_with_options(repo_url: &str, options: Options) -> Result<PathBuf, cr
         &local_repo_dir,
         options.display_progress,
     )?;
-    Ok(local_repo_dir)
+    Ok(Repo::new(local_repo_dir))
 }
 
 fn fetch(
@@ -87,6 +121,7 @@ fn decompress(archive: &File, dest_dir: &Path, display_progress: bool) -> Result
     } else {
         ProgressBar::no_length()
     };
+    progress.set_message("Decompressing repo...");
     let reader = progress.wrap_read(archive);
     // TODO: this assumes this will always be a tarball
     let gz = GzDecoder::new(reader);
