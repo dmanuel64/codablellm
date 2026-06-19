@@ -15,7 +15,11 @@ struct Manager {
 impl Manager {
     pub fn new(repo_url: String, mode: Mode, display_progress: bool) -> Self {
         let progress = if display_progress {
-            ProgressBar::new(Stage::COUNT as u64)
+            ProgressBar::new(if let Mode::SourceOnly = mode {
+                3
+            } else {
+                Stage::COUNT as u64 - 1
+            })
         } else {
             ProgressBar::hidden()
         };
@@ -31,25 +35,53 @@ impl Manager {
     fn step(&self) -> Result<Event, crate::Error> {
         match self.stage {
             Stage::Pulling => {
+                self.progress.set_message("Pulling repo...");
                 repo::pull(&self.repo_url)?;
                 Ok(Event::RepoPulled)
             }
-            Stage::SetupContainer => todo!(),
-            Stage::ExtractSourceCode => todo!(),
-            Stage::BuildCode => todo!(),
-            Stage::DecompileBinaries => todo!(),
-            Stage::MapCode => todo!(),
-            Stage::CreateDataset => todo!(),
+            Stage::ExtractSourceCode => {
+                self.progress.set_message("Extracting source code...");
+                Ok(Event::SourceCodeExtracted)
+            }
+            Stage::SetupBuilder => {
+                self.progress.set_message("Setting up builder...");
+                Ok(Event::BuilderSetup)
+            }
+            Stage::BuildCode => {
+                self.progress.set_message("Building repository...");
+                Ok(Event::CodeBuilt)
+            }
+            Stage::DecompileBinaries => {
+                self.progress.set_message("Decompiling binaries...");
+                Ok(Event::BinariesDecompiled)
+            }
+            Stage::MapCode => {
+                self.progress
+                    .set_message("Mapping decompiled/source code...");
+                Ok(Event::CodeMapped)
+            }
+            Stage::CreateDataset => {
+                self.progress.set_message("Creating dataset...");
+                Ok(Event::DatasetCreated)
+            }
             Stage::Complete => todo!(),
         }
     }
 
-    pub fn run(&self) -> Result<PathBuf, crate::Error> {
+    pub fn run(&mut self) -> Result<PathBuf, crate::Error> {
         loop {
-            if let Stage::Complete = &self.stage {
+            if let Stage::Complete = self.stage {
                 break;
             }
-            self.step()?;
+            let event = self.step()?;
+            self.stage = if let Event::SourceCodeExtracted = event
+                && let Mode::SourceOnly = self.mode
+            {
+                // Skip to create dataset stage
+                Stage::CreateDataset
+            } else {
+                self.stage.transition(&event)?
+            };
             self.progress.inc(1);
         }
         todo!("path to dataset")
@@ -59,8 +91,8 @@ impl Manager {
 #[derive(Debug, Display, EnumCount)]
 enum Stage {
     Pulling,
-    SetupContainer,
     ExtractSourceCode,
+    SetupBuilder,
     BuildCode,
     DecompileBinaries,
     MapCode,
@@ -73,10 +105,10 @@ impl Stage {
         Self::Pulling
     }
 
-    pub fn transition(self, event: Event) -> Result<Self, crate::Error> {
+    pub fn transition(&self, event: &Event) -> Result<Self, crate::Error> {
         match (self, event) {
-            (Self::Pulling, Event::RepoPulled) => Ok(Self::SetupContainer),
-            (Self::SetupContainer, Event::ContainerSetup) => Ok(Self::ExtractSourceCode),
+            (Self::Pulling, Event::RepoPulled) => Ok(Self::SetupBuilder),
+            (Self::SetupBuilder, Event::BuilderSetup) => Ok(Self::ExtractSourceCode),
             (Self::ExtractSourceCode, Event::SourceCodeExtracted) => Ok(Self::BuildCode),
             (Self::BuildCode, Event::CodeBuilt) => Ok(Self::DecompileBinaries),
             (Self::DecompileBinaries, Event::BinariesDecompiled) => Ok(Self::MapCode),
@@ -99,7 +131,7 @@ impl Default for Stage {
 #[derive(Debug, Display)]
 enum Event {
     RepoPulled,
-    ContainerSetup,
+    BuilderSetup,
     SourceCodeExtracted,
     CodeBuilt,
     BinariesDecompiled,
@@ -120,12 +152,14 @@ pub enum Mode {
 #[derive(Debug)]
 pub struct Options {
     pub display_progress: bool,
+    pub repo_options: repo::Options,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
             display_progress: Default::default(),
+            repo_options: repo::Options::default(),
         }
     }
 }

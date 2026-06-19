@@ -11,24 +11,32 @@ use indicatif::ProgressBar;
 use strum::IntoEnumIterator;
 use tar::Archive;
 use tempfile::tempfile;
+use thiserror::Error;
 
-use crate::{config, languages::Language};
+use crate::{config, language::Language};
 
 static LOCAL_REPO_ROOT: LazyLock<PathBuf> =
     LazyLock::new(|| config::APP_DIRS.cache_dir().join("repos"));
 
-pub struct Repo {
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("failed to fetch repository: {0}")]
+    Fetch(#[from] reqwest::Error),
+    #[error("failed to stream repository contents")]
+    Streaming,
+    #[error("failed to decompress repository")]
+    Decompression,
+}
+
+pub(crate) struct Repo {
     path: PathBuf,
-    pub target_languages: Vec<Language>,
+    pub languages: Vec<Language>,
 }
 
 impl Repo {
     pub fn new(path: PathBuf) -> Self {
-        let target_languages = Language::iter().collect();
-        Self {
-            path,
-            target_languages,
-        }
+        let languages = Language::iter().collect();
+        Self { path, languages }
     }
 
     pub fn path(&self) -> &Path {
@@ -37,11 +45,7 @@ impl Repo {
 
     pub fn source_files(&self) -> Vec<PathBuf> {
         let mut paths = Vec::new();
-        for ext in self
-            .target_languages
-            .iter()
-            .flat_map(|l| l.file_extensions())
-        {
+        for ext in self.languages.iter().flat_map(|l| l.file_extensions()) {
             let pattern = format!("{}/**/*.{}", self.path.display(), ext);
             paths.extend(glob(&pattern).unwrap().flatten());
         }
@@ -49,31 +53,32 @@ impl Repo {
     }
 }
 
+#[derive(Debug)]
 pub struct Options {
     pub display_progress: bool,
-    pub builder: Option<reqwest::blocking::ClientBuilder>,
+    pub request_builder: Option<reqwest::blocking::ClientBuilder>,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
             display_progress: true,
-            builder: None,
+            request_builder: None,
         }
     }
 }
 
-pub fn pull(repo_url: &str) -> Result<Repo, crate::Error> {
+pub fn pull(repo_url: &str) -> Result<Repo, Error> {
     pull_with_options(repo_url, Options::default())
 }
 
-pub fn pull_with_options(repo_url: &str, options: Options) -> Result<Repo, crate::Error> {
+pub fn pull_with_options(repo_url: &str, options: Options) -> Result<Repo, Error> {
     // TODO: check if zipfile or tarfile
-    let local_repo_archive = tempfile()?;
+    let local_repo_archive = tempfile().map_err(|_| Error::Streaming)?;
     fetch(
         repo_url,
         &local_repo_archive,
-        options.builder,
+        options.request_builder,
         options.display_progress,
     )?;
     let local_repo_dir = LOCAL_REPO_ROOT.join(url_to_dirname(repo_url));
@@ -90,7 +95,7 @@ fn fetch(
     dest_file: &File,
     builder: Option<reqwest::blocking::ClientBuilder>,
     display_progress: bool,
-) -> Result<(), crate::Error> {
+) -> Result<(), Error> {
     // Create HTTP client
     let client = if let Some(b) = builder {
         b.build()?
@@ -111,11 +116,11 @@ fn fetch(
     progress.set_message("Fetching repo...");
     let mut get_response = client.get(repo_url).send()?;
     let mut writer = progress.wrap_write(dest_file);
-    io::copy(&mut get_response, &mut writer)?;
+    io::copy(&mut get_response, &mut writer).map_err(|_| Error::Streaming)?;
     Ok(())
 }
 
-fn decompress(archive: &File, dest_dir: &Path, display_progress: bool) -> Result<(), crate::Error> {
+fn decompress(archive: &File, dest_dir: &Path, display_progress: bool) -> Result<(), Error> {
     let progress = if !display_progress {
         ProgressBar::hidden()
     } else {
@@ -126,7 +131,7 @@ fn decompress(archive: &File, dest_dir: &Path, display_progress: bool) -> Result
     // TODO: this assumes this will always be a tarball
     let gz = GzDecoder::new(reader);
     let mut archive = Archive::new(gz);
-    archive.unpack(dest_dir)?;
+    archive.unpack(dest_dir).map_err(|_| Error::Decompression)?;
     Ok(())
 }
 

@@ -1,5 +1,5 @@
 [package]
-name = "codablellm"
+name = "codablellm-core"
 version.workspace = true
 edition.workspace = true
 
@@ -7,7 +7,10 @@ edition.workspace = true
 name = "codablellm"
 
 [dependencies]
-anyhow = "1"
+anyhow.workspace = true
+strum.workspace = true
+thiserror.workspace = true
+
 bollard = "0.21"
 directories = "6"
 flate2 = "1"
@@ -15,10 +18,8 @@ glob = "0.3"
 indicatif = "0.18"
 rayon = "1"
 reqwest = { version = "0.13", features = ["blocking", "stream"] }
-strum = { version = "0.28", features = ["derive"] }
 tar = "0.4"
 tempfile = "3"
-thiserror = "2"
 # Tree-sitter and grammars
 tree-sitter = "0.26"
 tree-sitter-c = "0.24"
@@ -27,5 +28,7 @@ tree-sitter-cpp = "0.23"
 tree-sitter-go = "0.25"
 tree-sitter-java = "0.23"
 tree-sitter-javascript = "0.25"
+tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-typescript = "0.23"
+futures-util = "0.3.32"

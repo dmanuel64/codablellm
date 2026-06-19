@@ -8,5 +8,6 @@ name = "_core"
 crate-type = ["cdylib"]
 
 [dependencies]
-codablellm = { path = "../codablellm" }
-pyo3 = { version = "0.28", features = ["extension-module"] }
+codablellm-core.workspace = true
+
+pyo3 = { version = "0.29", features = ["extension-module"] }
