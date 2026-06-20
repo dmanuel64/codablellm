@@ -18,6 +18,7 @@ anyhow.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 futures-util.workspace = true
+url.workspace = true
 
 bollard = "0.21"
 directories = "6"
@@ -39,3 +40,7 @@ tree-sitter-javascript = "0.25"
 tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-typescript = "0.23"
+gix = { version = "0.84", optional = true }
+
+[features]
+git = ["dep:gix"]

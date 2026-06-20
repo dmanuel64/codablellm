@@ -1,9 +1,8 @@
-use codablellm::hello;
 use pyo3::prelude::*;
 
 #[pyfunction]
 fn hello_world() -> String {
-    hello()
+    todo!()
 }
 
 #[pymodule]

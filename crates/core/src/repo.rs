@@ -12,6 +12,7 @@ use strum::IntoEnumIterator;
 use tar::Archive;
 use tempfile::tempfile;
 use thiserror::Error;
+use url::Url;
 
 use crate::{config, language::Language};
 
@@ -26,6 +27,18 @@ pub enum Error {
     Streaming(#[source] io::Error),
     #[error("failed to decompress repository")]
     Decompression(#[source] io::Error),
+}
+
+pub enum Source {
+    Local(PathBuf),
+    Url(Url),
+}
+
+pub enum Format {
+    Zip,
+    Tarball,
+    #[cfg(feature = "git")]
+    Git,
 }
 
 pub struct Repository {

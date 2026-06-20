@@ -32,3 +32,9 @@ anyhow = "1"
 strum = { version = "0.28", features = ["derive"] }
 thiserror = "2"
 futures-util = "0.3"
+color-eyre = "0.6"
+human-panic = "2"
+url = { version = "2.5", features = ["serde"] }
+
+[profile.dev.package.backtrace]
+opt-level = 3

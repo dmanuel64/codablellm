@@ -9,6 +9,5 @@ pub mod mapper;
 pub mod pipeline;
 pub mod repo;
 
-pub fn hello() -> String {
-    "Hello from codablellm-core!".to_string()
-}
+pub use pipeline::{Error, Mode, Options, run, run_with_options};
+pub use repo::Source as RepoSource;

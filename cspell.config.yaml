@@ -11,11 +11,15 @@ dictionaries:
 words:
   - cdylib
   - cksum
+  - cnqoj
   - codablellm
   - flate
+  - goreleaser
   - indicatif
   - leptos
   - maturin
+  - modeline
+  - modelines
   - pyfunction
   - pymodule
   - reqwest

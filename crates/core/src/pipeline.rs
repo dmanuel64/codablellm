@@ -19,14 +19,14 @@ pub enum Error {
 }
 
 struct Manager {
-    repo_url: String,
+    source: repo::Source,
     mode: Mode,
     stage: Stage,
     progress: ProgressBar,
 }
 
 impl Manager {
-    pub fn new(repo_url: String, mode: Mode, display_progress: bool) -> Self {
+    pub fn new(source: repo::Source, mode: Mode, display_progress: bool) -> Self {
         let progress = if display_progress {
             ProgressBar::new(if let Mode::SourceOnly = mode {
                 3
@@ -38,7 +38,7 @@ impl Manager {
         };
 
         Self {
-            repo_url,
+            source,
             mode,
             stage: Stage::default(),
             progress,
@@ -49,7 +49,7 @@ impl Manager {
         match self.stage {
             Stage::Pulling => {
                 self.progress.set_message("Pulling repo...");
-                repo::pull(&self.repo_url)?;
+                // repo::pull(&self.repo_url)?;
                 Ok(Event::RepoPulled)
             }
             Stage::ExtractSourceCode => {
@@ -183,10 +183,14 @@ impl Default for Options {
     }
 }
 
-pub fn run(repo_url: String, mode: Mode) -> Result<PathBuf, Error> {
-    run_with_options(repo_url, mode, &Options::default())
+pub fn run(source: repo::Source, mode: Mode) -> Result<PathBuf, Error> {
+    run_with_options(source, mode, &Options::default())
 }
 
-pub fn run_with_options(repo_url: String, mode: Mode, options: &Options) -> Result<PathBuf, Error> {
-    Manager::new(repo_url, mode, options.display_progress).run()
+pub fn run_with_options(
+    source: repo::Source,
+    mode: Mode,
+    options: &Options,
+) -> Result<PathBuf, Error> {
+    Manager::new(source, mode, options.display_progress).run()
 }
