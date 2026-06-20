@@ -1,14 +1,32 @@
 [workspace]
-members = ["crates/*"]
+members = ["crates/*", "crates/app/src-tauri"]
+default-members = ["crates/cli"]
 resolver = "3"
 
 [workspace.package]
+authors = ["Dylan Manuel"]
+description = "A framework for creating and curating high-quality code datasets tailored for large language models"
+categories = ["artificial-intelligence", "security"]
+keywords = [
+    "large-language-models",
+    "automation",
+    "reverse-engineering",
+    "software-security",
+    "dataset-generation",
+]
+homepage = "https://codablellm.readthedocs.io/"
+license = "MIT"
 version = "2.0.0"
 edition = "2024"
+rust-version = "1.96"
+
 
 [workspace.dependencies]
 codablellm-core = { path = "crates/core" }
 codablellm-pyo3 = { path = "crates/pyo3" }
+codablellm-cli = { path = "crates/cli" }
+codablellm-app-ui = { path = "crates/app" }
+codablellm-app = { path = "crates/app/src-tauri" }
 
 anyhow = "1"
 strum = { version = "0.28", features = ["derive"] }

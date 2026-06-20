@@ -1,5 +1,12 @@
 [package]
 name = "codablellm-pyo3"
+description.workspace = true
+authors.workspace = true
+categories.workspace = true
+keywords.workspace = true
+homepage.workspace = true
+license.workspace = true
+rust-version.workspace = true
 version.workspace = true
 edition.workspace = true
 

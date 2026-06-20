@@ -14,11 +14,13 @@ words:
   - codablellm
   - flate
   - indicatif
+  - leptos
   - maturin
   - pyfunction
   - pymodule
   - reqwest
   - sexp
+  - tauri
   - thiserror
 ignoreWords: []
 import: []

@@ -2,6 +2,13 @@
 name = "codablellm-core"
 version.workspace = true
 edition.workspace = true
+description.workspace = true
+authors.workspace = true
+categories.workspace = true
+keywords.workspace = true
+homepage.workspace = true
+license.workspace = true
+rust-version.workspace = true
 
 [lib]
 name = "codablellm"

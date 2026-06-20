@@ -44,7 +44,7 @@ async fn create_builder_image(conn: &Docker) -> Result<(), Error> {
         .rm(true)
         .build();
 
-    conn.build_image(options, None, Some(body_full(tar_bytes.into())));
+    _ = conn.build_image(options, None, Some(body_full(tar_bytes.into())));
     Ok(())
 }
 

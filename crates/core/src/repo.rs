@@ -28,7 +28,7 @@ pub enum Error {
     Decompression(#[source] io::Error),
 }
 
-pub(crate) struct Repository {
+pub struct Repository {
     path: PathBuf,
     pub languages: Vec<Language>,
 }
