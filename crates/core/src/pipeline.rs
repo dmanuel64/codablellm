@@ -158,7 +158,7 @@ pub enum Event {
     DatasetCreated,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Mode {
     SourceOnly,
     SourceAndBinary {

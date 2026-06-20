@@ -18,6 +18,7 @@ words:
   - indicatif
   - leptos
   - maturin
+  - mimalloc
   - modeline
   - modelines
   - pyfunction

@@ -41,6 +41,11 @@ tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-typescript = "0.23"
 gix = { version = "0.84", optional = true }
+clap = { version = "4", optional = true, default-features = false, features = [
+    "derive",
+] }
+polars = "0.54"
 
 [features]
 git = ["dep:gix"]
+clap = ["dep:clap"]

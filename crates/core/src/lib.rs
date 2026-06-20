@@ -9,5 +9,7 @@ pub mod mapper;
 pub mod pipeline;
 pub mod repo;
 
-pub use pipeline::{Error, Mode, Options, run, run_with_options};
+pub use language::Language;
+pub use pipeline::Error as CodablellmError;
+pub use pipeline::{Mode, Options, run, run_with_options};
 pub use repo::Source as RepoSource;

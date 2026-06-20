@@ -15,9 +15,10 @@ name = "codablellm"
 path = "src/main.rs"
 
 [dependencies]
-codablellm-core = { workspace = true, features = ["git"] }
+codablellm-core = { workspace = true, features = ["git", "clap"] }
 
 color-eyre.workspace = true
 human-panic.workspace = true
-
 clap = { version = "4", features = ["derive"] }
+strum.workspace = true
+mimalloc.workspace = true

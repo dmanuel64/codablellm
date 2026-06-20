@@ -2,18 +2,23 @@ use std::path::Path;
 
 use strum::{Display, EnumIter, IntoEnumIterator};
 
-#[derive(Debug, Display, EnumIter)]
+#[derive(Debug, Clone, Display, EnumIter)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum Language {
     C,
     #[strum(serialize = "C++")]
+    #[cfg_attr(feature = "clap", clap(name = "c++"))]
     Cpp,
     Python,
+    #[cfg_attr(feature = "clap", clap(name = "javascript"))]
     JavaScript,
+    #[cfg_attr(feature = "clap", clap(name = "typescript"))]
     TypeScript,
     Go,
     Rust,
     Java,
     #[strum(serialize = "C#")]
+    #[cfg_attr(feature = "clap", clap(name = "c#"))]
     CSharp,
 }
 

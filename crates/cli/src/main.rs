@@ -1,17 +1,21 @@
+use mimalloc::MiMalloc;
 mod create;
 mod get;
 
 use clap::{Parser, Subcommand};
 use color_eyre::eyre::Result;
 
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
     #[clap(subcommand)]
-    pub command: Commands,
+    command: Commands,
     /// Number of times to greet
     #[arg(short, long, default_value_t = 1)]
-    pub verbose: u8,
+    verbose: u8,
 }
 
 #[derive(Debug, Subcommand)]
@@ -29,6 +33,6 @@ fn main() -> Result<()> {
     install_error_handlers()?;
     let args = Cli::parse();
     match args.command {
-        Commands::Create(command) => create::run(&command),
+        Commands::Create(command) => create::run(command),
     }
 }

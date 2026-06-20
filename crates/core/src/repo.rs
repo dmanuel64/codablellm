@@ -2,6 +2,7 @@ use std::{
     fs::File,
     io,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::LazyLock,
 };
 
@@ -27,11 +28,28 @@ pub enum Error {
     Streaming(#[source] io::Error),
     #[error("failed to decompress repository")]
     Decompression(#[source] io::Error),
+    #[error("could not determine the source type of the repository")]
+    AmbiguousSource,
 }
 
+#[derive(Debug, Clone)]
 pub enum Source {
     Local(PathBuf),
     Url(Url),
+}
+
+impl FromStr for Source {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(url) = Url::parse(s) {
+            Ok(Source::Url(url))
+        } else if s.contains("://") {
+            Err(Error::AmbiguousSource)
+        } else {
+            Ok(Source::Local(PathBuf::from(s)))
+        }
+    }
 }
 
 pub enum Format {
