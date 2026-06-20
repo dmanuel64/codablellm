@@ -23,17 +23,17 @@ pub enum Error {
     #[error("failed to fetch repository: {0}")]
     Fetch(#[from] reqwest::Error),
     #[error("failed to stream repository contents")]
-    Streaming,
+    Streaming(#[source] io::Error),
     #[error("failed to decompress repository")]
-    Decompression,
+    Decompression(#[source] io::Error),
 }
 
-pub(crate) struct Repo {
+pub(crate) struct Repository {
     path: PathBuf,
     pub languages: Vec<Language>,
 }
 
-impl Repo {
+impl Repository {
     pub fn new(path: PathBuf) -> Self {
         let languages = Language::iter().collect();
         Self { path, languages }
@@ -68,13 +68,13 @@ impl Default for Options {
     }
 }
 
-pub fn pull(repo_url: &str) -> Result<Repo, Error> {
+pub fn pull(repo_url: &str) -> Result<Repository, Error> {
     pull_with_options(repo_url, Options::default())
 }
 
-pub fn pull_with_options(repo_url: &str, options: Options) -> Result<Repo, Error> {
+pub fn pull_with_options(repo_url: &str, options: Options) -> Result<Repository, Error> {
     // TODO: check if zipfile or tarfile
-    let local_repo_archive = tempfile().map_err(|_| Error::Streaming)?;
+    let local_repo_archive = tempfile().map_err(|e| Error::Streaming(e))?;
     fetch(
         repo_url,
         &local_repo_archive,
@@ -87,7 +87,7 @@ pub fn pull_with_options(repo_url: &str, options: Options) -> Result<Repo, Error
         &local_repo_dir,
         options.display_progress,
     )?;
-    Ok(Repo::new(local_repo_dir))
+    Ok(Repository::new(local_repo_dir))
 }
 
 fn fetch(
@@ -116,7 +116,7 @@ fn fetch(
     progress.set_message("Fetching repo...");
     let mut get_response = client.get(repo_url).send()?;
     let mut writer = progress.wrap_write(dest_file);
-    io::copy(&mut get_response, &mut writer).map_err(|_| Error::Streaming)?;
+    io::copy(&mut get_response, &mut writer).map_err(|e| Error::Streaming(e))?;
     Ok(())
 }
 
@@ -131,7 +131,9 @@ fn decompress(archive: &File, dest_dir: &Path, display_progress: bool) -> Result
     // TODO: this assumes this will always be a tarball
     let gz = GzDecoder::new(reader);
     let mut archive = Archive::new(gz);
-    archive.unpack(dest_dir).map_err(|_| Error::Decompression)?;
+    archive
+        .unpack(dest_dir)
+        .map_err(|e| Error::Decompression(e))?;
     Ok(())
 }
 

@@ -1,19 +1,24 @@
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
+    str::Utf8Error,
 };
 
 use thiserror::Error;
 use tree_sitter::StreamingIterator;
 
-use crate::{function::Function, language::Language, repo::Repo};
+use crate::{function::Function, language::Language, repo::Repository};
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to parse {path}")]
-    Parse { path: PathBuf },
+    Parse {
+        path: PathBuf,
+        #[source]
+        source: Option<io::Error>,
+    },
     #[error("failed to decode")]
-    Decode,
+    Decode(#[from] Utf8Error),
 }
 
 #[derive(Debug)]
@@ -29,11 +34,11 @@ impl Default for Options {
     }
 }
 
-pub fn extract(repo: &Repo) -> Result<Vec<Function>, Error> {
+pub fn extract(repo: &Repository) -> Result<Vec<Function>, Error> {
     extract_with_options(repo, &Options::default())
 }
 
-pub fn extract_with_options(repo: &Repo, options: &Options) -> Result<Vec<Function>, Error> {
+pub fn extract_with_options(repo: &Repository, options: &Options) -> Result<Vec<Function>, Error> {
     let mut functions = Vec::new();
     let mut parser = tree_sitter::Parser::new();
     for source_file in repo.source_files() {
@@ -81,12 +86,12 @@ fn query_functions(
             let name = name
                 .node
                 .utf8_text(source)
-                .map_err(|_| Error::Decode)?
+                .map_err(Utf8Error::from)?
                 .to_string();
             let definition = def
                 .node
                 .utf8_text(source)
-                .map_err(|_| Error::Decode)?
+                .map_err(Utf8Error::from)?
                 .to_string();
             functions.push(Function { name, definition });
         }
@@ -102,11 +107,13 @@ fn parse(
     parser
         .set_language(&language)
         .expect("the language to be set correctly for the parser");
-    let source = fs::read(path).map_err(|_| Error::Parse {
+    let source = fs::read(path).map_err(|e| Error::Parse {
         path: path.to_path_buf(),
+        source: Some(e),
     })?;
     let tree = parser.parse(&source, None).ok_or_else(|| Error::Parse {
         path: path.to_path_buf(),
+        source: None,
     })?;
     Ok((tree, source))
 }

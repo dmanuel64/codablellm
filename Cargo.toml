@@ -13,3 +13,4 @@ codablellm-pyo3 = { path = "crates/pyo3" }
 anyhow = "1"
 strum = { version = "0.28", features = ["derive"] }
 thiserror = "2"
+futures-util = "0.3"

@@ -1,28 +1,42 @@
-use futures_util::{TryStreamExt};
+use bollard::{
+    Docker, body_full,
+    plugin::ContainerCreateBody,
+    query_parameters::{BuildImageOptionsBuilder, CreateContainerOptionsBuilder},
+};
+use futures_util::TryStreamExt;
 use std::path::Path;
-use bollard::{Docker, body_full, query_parameters::BuildImageOptionsBuilder};
 use thiserror::Error;
 
-use crate::repo::Repo;
+use crate::repo::Repository;
 
 const DOCKERFILE_SOURCE: &str = include_str!("../assets/builder.Dockerfile");
 const BUILDER_IMAGE_TAG: &str = "codablellm-builder:latest";
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("failed to build")]
-    Build,
+    #[error("failed to create tarball containing builder Dockerfile")]
+    TarballError(#[source] std::io::Error),
+    #[error("failed to connect to Docker")]
+    DockerConnectionError(#[source] bollard::errors::Error),
+    #[error("failed to create builder container")]
+    BuilderCreationError(#[source] bollard::errors::Error),
+    #[error("failed to run build command: {0}")]
+    BuildError(#[source] bollard::errors::Error),
 }
 
-async fn create_builder(conn: &Docker) -> Result<(), bollard::errors::Error> {
+async fn create_builder_image(conn: &Docker) -> Result<(), Error> {
     let mut builder = tar::Builder::new(Vec::new());
     let mut header = tar::Header::new_gnu();
-    header.set_path("Dockerfile")?;
+    header
+        .set_path("Dockerfile")
+        .map_err(|e| Error::TarballError(e))?;
     header.set_size(DOCKERFILE_SOURCE.len() as u64);
     header.set_mode(0o644);
     header.set_cksum();
-    builder.append(&header, DOCKERFILE_SOURCE.as_bytes())?;
-    let tar_bytes = builder.into_inner()?;
+    builder
+        .append(&header, DOCKERFILE_SOURCE.as_bytes())
+        .map_err(|e| Error::TarballError(e))?;
+    let tar_bytes = builder.into_inner().map_err(|e| Error::TarballError(e))?;
 
     let options = BuildImageOptionsBuilder::default()
         .dockerfile("Dockerfile")
@@ -30,17 +44,28 @@ async fn create_builder(conn: &Docker) -> Result<(), bollard::errors::Error> {
         .rm(true)
         .build();
 
-    let mut stream = conn.build_image(options, None, Some(body_full(tar_bytes.into())));
-    while let Some(msg) = stream.try_next().await? {
-        if let Some(line) = msg.stream {
-            print!("{line}");
-        }
-    }
+    conn.build_image(options, None, Some(body_full(tar_bytes.into())));
     Ok(())
 }
 
-pub async fn build(repo: &Repo, command: &str, artifacts: &[&Path]) -> Result<(), Error> {
-    let conn = Docker::connect_with_defaults()?;
-    let tar_bytes = bu
-    conn.build_image(options, credentials, tar)
+async fn create_builder_container(conn: &Docker) -> Result<String, Error> {
+    let name = "codablellm-builder";
+    let options = CreateContainerOptionsBuilder::default().name(name).build();
+    let config = ContainerCreateBody {
+        ..Default::default()
+    };
+    conn.create_container(Some(options), config)
+        .await
+        .map_err(|e| Error::BuilderCreationError(e))?;
+    Ok(name.to_string())
+}
+
+/// Builds a repository in a builder container given a build command, and paths to where the expected build artifacts reside
+pub async fn build(repo: &Repository, command: &str, artifacts: &[&Path]) -> Result<(), Error> {
+    let conn = Docker::connect_with_defaults().map_err(|e| Error::DockerConnectionError(e))?;
+    create_builder_image(&conn).await?;
+    let name = create_builder_container(&conn).await?;
+    conn.start_container(&name, None)
+        .await
+        .map_err(|e| Error::BuildError(e))
 }

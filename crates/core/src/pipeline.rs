@@ -1,9 +1,22 @@
-use std::{collections::HashSet, path::PathBuf};
+use std::{collections::HashSet, mem, path::PathBuf};
 
 use indicatif::ProgressBar;
 use strum::{Display, EnumCount};
+use thiserror::Error;
 
-use crate::repo;
+use crate::{builder, extractor, repo};
+
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error(transparent)]
+    Repository(#[from] repo::Error),
+    #[error(transparent)]
+    Extractor(#[from] extractor::Error),
+    #[error(transparent)]
+    Builder(#[from] builder::Error),
+    #[error("cannot transition from stage \"{stage}\" via event \"{event}\"")]
+    InvalidTransition { stage: Stage, event: Event },
+}
 
 struct Manager {
     repo_url: String,
@@ -32,7 +45,7 @@ impl Manager {
         }
     }
 
-    fn step(&self) -> Result<Event, crate::Error> {
+    fn step(&self) -> Result<Event, Error> {
         match self.stage {
             Stage::Pulling => {
                 self.progress.set_message("Pulling repo...");
@@ -68,28 +81,30 @@ impl Manager {
         }
     }
 
-    pub fn run(&mut self) -> Result<PathBuf, crate::Error> {
+    /// Some docstring
+    pub fn run(&mut self) -> Result<PathBuf, Error> {
+        // A comment
         loop {
             if let Stage::Complete = self.stage {
                 break;
             }
             let event = self.step()?;
-            self.stage = if let Event::SourceCodeExtracted = event
+            if let Event::SourceCodeExtracted = event
                 && let Mode::SourceOnly = self.mode
             {
                 // Skip to create dataset stage
-                Stage::CreateDataset
+                self.stage = Stage::CreateDataset
             } else {
-                self.stage.transition(&event)?
-            };
+                self.stage.transition(event)?;
+            }
             self.progress.inc(1);
         }
         todo!("path to dataset")
     }
 }
 
-#[derive(Debug, Display, EnumCount)]
-enum Stage {
+#[derive(Debug, Copy, Clone, Display, EnumCount)]
+pub enum Stage {
     Pulling,
     ExtractSourceCode,
     SetupBuilder,
@@ -105,20 +120,24 @@ impl Stage {
         Self::Pulling
     }
 
-    pub fn transition(&self, event: &Event) -> Result<Self, crate::Error> {
-        match (self, event) {
-            (Self::Pulling, Event::RepoPulled) => Ok(Self::SetupBuilder),
-            (Self::SetupBuilder, Event::BuilderSetup) => Ok(Self::ExtractSourceCode),
-            (Self::ExtractSourceCode, Event::SourceCodeExtracted) => Ok(Self::BuildCode),
-            (Self::BuildCode, Event::CodeBuilt) => Ok(Self::DecompileBinaries),
-            (Self::DecompileBinaries, Event::BinariesDecompiled) => Ok(Self::MapCode),
-            (Self::MapCode, Event::CodeMapped) => Ok(Self::CreateDataset),
-            (Self::CreateDataset, Event::DatasetCreated) => Ok(Self::Complete),
-            (stage, event) => Err(crate::Error::InvalidTransition {
-                stage: stage.to_string(),
-                event: event.to_string(),
-            }),
-        }
+    pub fn transition(&mut self, event: Event) -> Result<(), Error> {
+        let next = match (&*self, event) {
+            (Self::Pulling, Event::RepoPulled) => Self::SetupBuilder,
+            (Self::SetupBuilder, Event::BuilderSetup) => Self::ExtractSourceCode,
+            (Self::ExtractSourceCode, Event::SourceCodeExtracted) => Self::BuildCode,
+            (Self::BuildCode, Event::CodeBuilt) => Self::DecompileBinaries,
+            (Self::DecompileBinaries, Event::BinariesDecompiled) => Self::MapCode,
+            (Self::MapCode, Event::CodeMapped) => Self::CreateDataset,
+            (Self::CreateDataset, Event::DatasetCreated) => Self::Complete,
+            (stage, event) => {
+                return Err(Error::InvalidTransition {
+                    stage: *stage,
+                    event,
+                });
+            }
+        };
+        *self = next;
+        Ok(())
     }
 }
 
@@ -129,7 +148,7 @@ impl Default for Stage {
 }
 
 #[derive(Debug, Display)]
-enum Event {
+pub enum Event {
     RepoPulled,
     BuilderSetup,
     SourceCodeExtracted,
@@ -164,14 +183,10 @@ impl Default for Options {
     }
 }
 
-pub fn run(repo_url: String, mode: Mode) -> Result<PathBuf, crate::Error> {
+pub fn run(repo_url: String, mode: Mode) -> Result<PathBuf, Error> {
     run_with_options(repo_url, mode, &Options::default())
 }
 
-pub fn run_with_options(
-    repo_url: String,
-    mode: Mode,
-    options: &Options,
-) -> Result<PathBuf, crate::Error> {
+pub fn run_with_options(repo_url: String, mode: Mode, options: &Options) -> Result<PathBuf, Error> {
     Manager::new(repo_url, mode, options.display_progress).run()
 }
