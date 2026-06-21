@@ -19,12 +19,15 @@ words:
   - leptos
   - maturin
   - mimalloc
+  - mlua
   - modeline
   - modelines
   - pyfunction
   - pymodule
   - reqwest
+  - rhai
   - sexp
+  - starlark
   - tauri
   - thiserror
 ignoreWords: []

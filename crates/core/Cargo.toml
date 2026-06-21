@@ -46,7 +46,16 @@ clap = { version = "4", optional = true, default-features = false, features = [
     "derive",
 ] }
 polars = "0.54"
+rhai = { version = "1.19", optional = true }
+starlark = { version = "0.14", optional = true }
+mlua = { version = "0.11", features = ["vendored", "luau"], optional = true }
 
 [features]
+default = ["rhai"]
+full = ["rhai", "lua", "starlark", "clap", "git"]
+
 git = ["dep:gix"]
 clap = ["dep:clap"]
+rhai = ["dep:rhai"]
+lua = ["dep:mlua"]
+starlark = ["dep:starlark"]
