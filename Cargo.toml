@@ -23,10 +23,6 @@ rust-version = "1.96"
 
 [workspace.dependencies]
 codablellm-core = { path = "crates/core" }
-codablellm-pyo3 = { path = "crates/pyo3" }
-codablellm-cli = { path = "crates/cli" }
-codablellm-app-ui = { path = "crates/app" }
-codablellm-app = { path = "crates/app/src-tauri" }
 
 anyhow = "1"
 strum = { version = "0.28", features = ["derive"] }
@@ -36,6 +32,4 @@ color-eyre = "0.6"
 human-panic = "2"
 url = { version = "2.5", features = ["serde"] }
 mimalloc = "0.1"
-
-[profile.dev.package.backtrace]
-opt-level = 3
+log = "0.4"

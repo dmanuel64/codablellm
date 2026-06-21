@@ -2,7 +2,7 @@ use mimalloc::MiMalloc;
 mod create;
 mod get;
 
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 use color_eyre::eyre::Result;
 
 #[global_allocator]
@@ -14,7 +14,7 @@ struct Cli {
     #[clap(subcommand)]
     command: Commands,
     /// Number of times to greet
-    #[arg(short, long, default_value_t = 1)]
+    #[arg(short, long, action = ArgAction::Count)]
     verbose: u8,
 }
 
@@ -29,9 +29,20 @@ fn install_error_handlers() -> Result<()> {
     Ok(())
 }
 
+pub fn init_logger(verbosity: u8) {
+    let level = match verbosity {
+        0 => log::LevelFilter::Warn,
+        1 => log::LevelFilter::Info,
+        2 => log::LevelFilter::Debug,
+        _ => log::LevelFilter::Trace,
+    };
+    env_logger::Builder::new().filter_level(level).init();
+}
+
 fn main() -> Result<()> {
     install_error_handlers()?;
     let args = Cli::parse();
+    init_logger(args.verbose);
     match args.command {
         Commands::Create(command) => create::run(command),
     }

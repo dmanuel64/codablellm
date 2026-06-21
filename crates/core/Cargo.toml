@@ -19,6 +19,7 @@ strum.workspace = true
 thiserror.workspace = true
 futures-util.workspace = true
 url.workspace = true
+log.workspace = true
 
 bollard = "0.21"
 directories = "6"

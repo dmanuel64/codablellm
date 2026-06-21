@@ -83,21 +83,27 @@ impl Manager {
 
     /// Some docstring
     pub fn run(&mut self) -> Result<PathBuf, Error> {
-        // A comment
+        log::info!("Starting pipeline");
         loop {
             if let Stage::Complete = self.stage {
                 break;
             }
             let event = self.step()?;
+            log::debug!("Pipeline event received: {event:?}");
+            let prev_stage = self.stage;
             if let Event::SourceCodeExtracted = event
                 && let Mode::SourceOnly = self.mode
             {
                 // Skip to create dataset stage
+                log::debug!(
+                    "Current pipeline mode is source code only - skipping to dataset creation stage"
+                );
                 self.stage = Stage::CreateDataset
             } else {
                 self.stage.transition(event)?;
             }
             self.progress.inc(1);
+            log::info!("Pipeline transitioned from {prev_stage} -> {}", self.stage);
         }
         todo!("path to dataset")
     }
@@ -192,5 +198,6 @@ pub fn run_with_options(
     mode: Mode,
     options: &Options,
 ) -> Result<PathBuf, Error> {
+    log::trace!("Pipeline mode: {mode:?}; pipeline options: {options:#?}");
     Manager::new(source, mode, options.display_progress).run()
 }

@@ -19,6 +19,9 @@ codablellm-core = { workspace = true, features = ["git", "clap"] }
 
 color-eyre.workspace = true
 human-panic.workspace = true
-clap = { version = "4", features = ["derive"] }
 strum.workspace = true
 mimalloc.workspace = true
+log.workspace = true
+
+clap = { version = "4", features = ["derive"] }
+env_logger = "0.11"
