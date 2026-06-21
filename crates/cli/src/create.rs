@@ -1,43 +1,66 @@
+use clap::{Args, Subcommand};
+use codablellm::RepoSource;
+use color_eyre::eyre::{Report, Result};
 use std::path::PathBuf;
 
-use strum::IntoEnumIterator;
-mod binary;
+#[derive(Debug, Args)]
+struct CreateDatasetArgs {
+    /// The path or url to the repository
+    repo: RepoSource,
+}
 
-use clap::{Args, Subcommand};
-use codablellm::{Language, RepoSource};
-use color_eyre::eyre::{Report, Result};
+#[derive(Debug, Args)]
+struct CreateDatasetOptArgs {
+    /// Name of the dataset being created
+    name: Option<String>,
+}
 
 #[derive(Debug, Subcommand)]
 enum Commands {
     /// Only extract source
-    Source,
+    SourceDataset {
+        #[clap(flatten)]
+        create_dataset_args: CreateDatasetArgs,
+        #[clap(flatten)]
+        create_dataset_opt_args: CreateDatasetOptArgs,
+    },
     /// Extract source and binary
-    Binary,
+    BinaryDataset {
+        #[clap(flatten)]
+        create_dataset_args: CreateDatasetArgs,
+        #[clap(flatten)]
+        create_dataset_opt_args: CreateDatasetOptArgs,
+    },
+    Script {
+        name: String,
+    },
 }
 
 #[derive(Debug, Args)]
 pub struct Command {
-    /// Name of the dataset being created
-    dataset: String,
-    /// The path or url to the repository
-    repo: RepoSource,
-    /// Languages to only extract
-    ///
-    /// By default, codablellm will extract all possible languages.
-    #[arg(long = "langs", alias = "lang", value_enum, value_delimiter = ',', default_values_t = Language::iter(), hide_default_value = true)]
-    languages: Vec<Language>,
     #[clap(subcommand)]
     command: Commands,
 }
 
 pub fn run(command: Command) -> Result<()> {
     let dataset_path = match command.command {
-        Commands::Source => create_source_dataset(command),
-        Commands::Binary => todo!(),
+        Commands::SourceDataset {
+            create_dataset_args: CreateDatasetArgs { repo },
+            create_dataset_opt_args: CreateDatasetOptArgs { name },
+        } => create_source_dataset(repo, name),
+        Commands::BinaryDataset {
+            create_dataset_args: CreateDatasetArgs { repo },
+            create_dataset_opt_args: CreateDatasetOptArgs { name },
+        } => create_binary_dataset(repo, name),
+        Commands::Script { name } => todo!(),
     }?;
     Ok(())
 }
 
-fn create_source_dataset(command: Command) -> Result<PathBuf> {
-    codablellm::run(command.repo, codablellm::Mode::SourceOnly).map_err(Report::from)
+fn create_source_dataset(repo: RepoSource, name: Option<String>) -> Result<PathBuf> {
+    codablellm::run(repo, codablellm::Mode::SourceOnly).map_err(Report::from)
+}
+
+fn create_binary_dataset(repo: RepoSource, name: Option<String>) -> Result<PathBuf> {
+    codablellm::run(repo, codablellm::Mode::SourceOnly).map_err(Report::from)
 }

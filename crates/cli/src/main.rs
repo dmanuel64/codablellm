@@ -1,9 +1,12 @@
-use mimalloc::MiMalloc;
+mod args;
+mod config;
 mod create;
+mod delete;
 mod get;
 
 use clap::{ArgAction, Parser, Subcommand};
 use color_eyre::eyre::Result;
+use mimalloc::MiMalloc;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
