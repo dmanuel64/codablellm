@@ -1053,6 +1053,7 @@ dependencies = [
  "clap",
  "directories",
  "flate2",
+ "fs_extra",
  "futures-util",
  "gix",
  "glob",

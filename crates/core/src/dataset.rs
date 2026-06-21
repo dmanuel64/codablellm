@@ -11,16 +11,8 @@ use crate::{config, function::Function};
 pub static DATASETS_DIR: LazyLock<PathBuf> =
     LazyLock::new(|| config::APP_DIRS.data_local_dir().join("datasets"));
 
-pub fn ensure_datasets_dir_exists() -> Result<(), config::Error> {
-    config::ensure_dir_exists(&DATASETS_DIR)
-}
-
 pub static SCRIPTS_DIR: LazyLock<PathBuf> =
     LazyLock::new(|| config::APP_DIRS.data_local_dir().join("scripts"));
-
-pub fn ensure_scripts_dir_exists() -> Result<(), config::Error> {
-    config::ensure_dir_exists(&SCRIPTS_DIR)
-}
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -28,6 +20,12 @@ pub enum Error {
     DatasetCreation(#[source] PolarsError),
     #[error("script failure")]
     ScriptError,
+}
+
+#[derive(Debug, Default)]
+pub struct Options<'a> {
+    pub display_progress: bool,
+    pub script_options: ScriptOptions<'a>,
 }
 
 pub trait Dataset {
@@ -117,7 +115,6 @@ impl Script {
     }
 
     pub fn new_with_options(path: &Path, options: &ScriptOptions) -> Result<Self, config::Error> {
-        ensure_scripts_dir_exists()?;
         let name = path.to_string_lossy().to_string();
         let dest = SCRIPTS_DIR.join(name);
         config::copy_data("script", path, &dest, false)?;

@@ -2,6 +2,12 @@ use std::path::Path;
 
 use strum::{Display, EnumIter, IntoEnumIterator};
 
+#[derive(Debug, Default)]
+pub struct Options {
+    pub display_progress: bool,
+    pub request_builder: Option<reqwest::blocking::ClientBuilder>,
+}
+
 #[derive(Debug, Clone, Display, EnumIter)]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum Language {

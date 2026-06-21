@@ -1,5 +1,6 @@
 use directories::ProjectDirs;
-use std::{fs, io, path::Path, sync::LazyLock};
+use fs_extra::{dir, file};
+use std::{path::Path, sync::LazyLock};
 use thiserror::Error;
 
 pub(crate) static APP_DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
@@ -9,20 +10,17 @@ pub(crate) static APP_DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("failed to create CodableLLM data directory")]
-    DataDirectoryError(#[source] io::Error),
-    #[error("failed to copy {kind} data")]
-    CopyDataFailed {
-        kind: &'static str,
-        #[source]
-        source: io::Error,
-    },
-    #[error("cannot create {kind} \"{name}\": {kind} already exists")]
+    #[error("{0}")]
+    Io(#[from] fs_extra::error::Error),
+    #[error("{kind} \"{name}\": {kind} already exists")]
     DataExists { kind: &'static str, name: String },
+    #[error("{kind} \"{name}\": {kind} does not exist")]
+    DataNotFound { kind: &'static str, name: String },
 }
 
+// TODO: config doesn't seem the best spot for the io stuff
 pub(crate) fn ensure_dir_exists(path: &Path) -> Result<(), Error> {
-    fs::create_dir_all(path).map_err(|e| Error::DataDirectoryError(e))
+    dir::create_all(path, false).map_err(Error::from)
 }
 
 pub(crate) fn copy_data(
@@ -37,6 +35,36 @@ pub(crate) fn copy_data(
             name: src.to_string_lossy().to_string(),
         });
     }
-    fs::copy(src, dest).map_err(|e| Error::CopyDataFailed { kind, source: e })?;
+
+    if let Some(parent) = dest.parent() {
+        ensure_dir_exists(parent)?;
+    }
+
+    let result = if src.is_dir() {
+        let options = dir::CopyOptions::new().overwrite(force).content_only(true);
+        dir::copy(src, dest, &options)
+    } else {
+        let options = file::CopyOptions::new().overwrite(force);
+        file::copy(src, dest, &options)
+    };
+
+    result.map_err(Error::from)?;
     Ok(())
+}
+
+pub(crate) fn delete_data(kind: &'static str, path: &Path) -> Result<(), Error> {
+    if !path.exists() {
+        return Err(Error::DataNotFound {
+            kind,
+            name: path.to_string_lossy().to_string(),
+        });
+    }
+
+    let result = if path.is_dir() {
+        dir::remove(path)
+    } else {
+        file::remove(path)
+    };
+
+    result.map_err(Error::from)
 }

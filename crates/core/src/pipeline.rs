@@ -4,7 +4,7 @@ use indicatif::ProgressBar;
 use strum::{Display, EnumCount};
 use thiserror::Error;
 
-use crate::{builder, extractor, repo};
+use crate::{builder, dataset, decompiler, extractor, language, mapper, repo};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -175,16 +175,26 @@ pub enum Mode {
 }
 
 #[derive(Debug)]
-pub struct Options {
+pub struct Options<'a> {
     pub display_progress: bool,
     pub repo_options: repo::Options,
+    pub language_options: language::Options,
+    pub extractor_options: extractor::Options,
+    pub decompiler_options: decompiler::Options,
+    pub mapper_options: mapper::Options,
+    pub dataset_options: dataset::Options<'a>,
 }
 
-impl Default for Options {
+impl Default for Options<'_> {
     fn default() -> Self {
         Self {
-            display_progress: Default::default(),
+            display_progress: true,
             repo_options: repo::Options::default(),
+            language_options: language::Options::default(),
+            extractor_options: extractor::Options::default(),
+            decompiler_options: decompiler::Options::default(),
+            mapper_options: mapper::Options::default(),
+            dataset_options: dataset::Options::default(),
         }
     }
 }
