@@ -1,12 +1,12 @@
 use clap::{Args, Subcommand};
-use codablellm::RepoSource;
+use codablellm::FileSource;
 use color_eyre::eyre::{Report, Result};
 use std::path::PathBuf;
 
 #[derive(Debug, Args)]
 struct CreateDatasetArgs {
     /// The path or url to the repository
-    repo: RepoSource,
+    repo: FileSource,
 }
 
 #[derive(Debug, Args)]
@@ -57,10 +57,10 @@ pub fn run(command: Command) -> Result<()> {
     Ok(())
 }
 
-fn create_source_dataset(repo: RepoSource, name: Option<String>) -> Result<PathBuf> {
+fn create_source_dataset(repo: FileSource, name: Option<String>) -> Result<PathBuf> {
     codablellm::run(repo, codablellm::Mode::SourceOnly).map_err(Report::from)
 }
 
-fn create_binary_dataset(repo: RepoSource, name: Option<String>) -> Result<PathBuf> {
+fn create_binary_dataset(repo: FileSource, name: Option<String>) -> Result<PathBuf> {
     codablellm::run(repo, codablellm::Mode::SourceOnly).map_err(Report::from)
 }

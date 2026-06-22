@@ -4,7 +4,7 @@ use indicatif::ProgressBar;
 use strum::{Display, EnumCount};
 use thiserror::Error;
 
-use crate::{builder, dataset, decompiler, extractor, language, mapper, repo};
+use crate::{FileSource, builder, dataset, decompiler, extractor, language, mapper, repo, storage};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -14,19 +14,21 @@ pub enum Error {
     Extractor(#[from] extractor::Error),
     #[error(transparent)]
     Builder(#[from] builder::Error),
+    #[error(transparent)]
+    Storage(#[from] storage::Error),
     #[error("cannot transition from stage \"{stage}\" via event \"{event}\"")]
     InvalidTransition { stage: Stage, event: Event },
 }
 
 struct Manager {
-    source: repo::Source,
+    source: FileSource,
     mode: Mode,
     stage: Stage,
     progress: ProgressBar,
 }
 
 impl Manager {
-    pub fn new(source: repo::Source, mode: Mode, display_progress: bool) -> Self {
+    pub fn new(source: FileSource, mode: Mode, display_progress: bool) -> Self {
         let progress = if display_progress {
             ProgressBar::new(if let Mode::SourceOnly = mode {
                 3
@@ -199,12 +201,12 @@ impl Default for Options<'_> {
     }
 }
 
-pub fn run(source: repo::Source, mode: Mode) -> Result<PathBuf, Error> {
+pub fn run(source: FileSource, mode: Mode) -> Result<PathBuf, Error> {
     run_with_options(source, mode, &Options::default())
 }
 
 pub fn run_with_options(
-    source: repo::Source,
+    source: FileSource,
     mode: Mode,
     options: &Options,
 ) -> Result<PathBuf, Error> {

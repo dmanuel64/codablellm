@@ -24,6 +24,7 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     Create(create::Command),
+    Config(config::Command),
 }
 
 fn install_error_handlers() -> Result<()> {
@@ -48,5 +49,6 @@ fn main() -> Result<()> {
     init_logger(args.verbose);
     match args.command {
         Commands::Create(command) => create::run(command),
+        Commands::Config(command) => config::run(command),
     }
 }

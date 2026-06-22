@@ -6,13 +6,13 @@ use std::{
 use polars::prelude::*;
 use thiserror::Error;
 
-use crate::{config, function::Function};
+use crate::{function::Function, storage};
 
 pub static DATASETS_DIR: LazyLock<PathBuf> =
-    LazyLock::new(|| config::APP_DIRS.data_local_dir().join("datasets"));
+    LazyLock::new(|| storage::APP_DIRS.data_local_dir().join("datasets"));
 
 pub static SCRIPTS_DIR: LazyLock<PathBuf> =
-    LazyLock::new(|| config::APP_DIRS.data_local_dir().join("scripts"));
+    LazyLock::new(|| storage::APP_DIRS.data_local_dir().join("scripts"));
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -110,14 +110,14 @@ pub struct Script {
 }
 
 impl Script {
-    pub fn new(path: &Path) -> Result<Self, config::Error> {
+    pub fn new(path: &Path) -> Result<Self, storage::Error> {
         Self::new_with_options(path, &ScriptOptions::default())
     }
 
-    pub fn new_with_options(path: &Path, options: &ScriptOptions) -> Result<Self, config::Error> {
+    pub fn new_with_options(path: &Path, options: &ScriptOptions) -> Result<Self, storage::Error> {
         let name = path.to_string_lossy().to_string();
         let dest = SCRIPTS_DIR.join(name);
-        config::copy_data("script", path, &dest, false)?;
+        storage::copy_data("script", path, &dest, false)?;
         Ok(Self {
             hook: options.hook,
             engine: options.engine,

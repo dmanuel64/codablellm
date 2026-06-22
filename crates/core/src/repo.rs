@@ -2,7 +2,6 @@ use std::{
     fs::File,
     io,
     path::{Path, PathBuf},
-    str::FromStr,
     sync::LazyLock,
 };
 
@@ -13,48 +12,20 @@ use strum::IntoEnumIterator;
 use tar::Archive;
 use tempfile::tempfile;
 use thiserror::Error;
-use url::Url;
 
-use crate::{config, language::Language};
+use crate::{language::Language, storage};
 
 static LOCAL_REPO_ROOT: LazyLock<PathBuf> =
-    LazyLock::new(|| config::APP_DIRS.cache_dir().join("repos"));
+    LazyLock::new(|| storage::APP_DIRS.cache_dir().join("repos"));
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("failed to fetch repository: {0}")]
-    Fetch(#[from] reqwest::Error),
-    #[error("failed to stream repository contents")]
-    Streaming(#[source] io::Error),
     #[error("failed to decompress repository")]
     Decompression(#[source] io::Error),
-    #[error("could not determine the source type of the repository")]
-    AmbiguousSource,
-}
-
-#[derive(Debug, Clone)]
-pub enum Source {
-    Local(PathBuf),
-    Url(Url),
-}
-
-impl FromStr for Source {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(url) = Url::parse(s) {
-            Ok(Source::Url(url))
-        } else if s.contains("://") {
-            Err(Error::AmbiguousSource)
-        } else {
-            Ok(Source::Local(PathBuf::from(s)))
-        }
-    }
 }
 
 pub enum Format {
-    Zip,
-    Tarball,
+    Storage(storage::Format),
     #[cfg(feature = "git")]
     Git,
 }

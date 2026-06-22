@@ -1,70 +1,71 @@
-use directories::ProjectDirs;
-use fs_extra::{dir, file};
-use std::{path::Path, sync::LazyLock};
+use crate::storage::APP_DIRS;
+use serde::{Deserialize, Serialize};
+use std::{
+    fs, io,
+    path::PathBuf,
+    sync::{LazyLock, RwLock},
+};
 use thiserror::Error;
 
-pub(crate) static APP_DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
-    ProjectDirs::from("io.github", "dmanuel64", "codablellm")
-        .expect("a home directory to be found on the host system")
+pub static PATH: LazyLock<PathBuf> =
+    LazyLock::new(|| APP_DIRS.config_local_dir().join("config.toml"));
+
+static CONFIG: LazyLock<RwLock<Config>> = LazyLock::new(|| {
+    RwLock::new(
+        Config::load()
+            .inspect_err(|e| {
+                log::debug!("{e}");
+                log::error!(
+                    "Failed to load CodableLLM config - using default configuration options"
+                );
+            })
+            .unwrap_or_default(),
+    )
 });
+
+pub fn get() -> Config {
+    CONFIG.read().unwrap().clone()
+}
+
+pub fn update<F>(f: F) -> Result<(), Error>
+where
+    F: FnOnce(&mut Config),
+{
+    let mut guard = CONFIG.write().unwrap();
+    f(&mut guard);
+    guard.save()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Config {}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
+impl Config {
+    pub fn load() -> Result<Self, Error> {
+        if !PATH.exists() {
+            return Ok(Self::default());
+        }
+        toml::from_str(&fs::read_to_string(*PATH)?).into()
+    }
+
+    pub fn save(&self) -> Result<(), Error> {
+        let contents = toml::to_string_pretty(self)?;
+        fs::write(&*PATH, contents)?;
+        Ok(())
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("{0}")]
-    Io(#[from] fs_extra::error::Error),
-    #[error("{kind} \"{name}\": {kind} already exists")]
-    DataExists { kind: &'static str, name: String },
-    #[error("{kind} \"{name}\": {kind} does not exist")]
-    DataNotFound { kind: &'static str, name: String },
-}
-
-// TODO: config doesn't seem the best spot for the io stuff
-pub(crate) fn ensure_dir_exists(path: &Path) -> Result<(), Error> {
-    dir::create_all(path, false).map_err(Error::from)
-}
-
-pub(crate) fn copy_data(
-    kind: &'static str,
-    src: &Path,
-    dest: &Path,
-    force: bool,
-) -> Result<(), Error> {
-    if !force && dest.exists() {
-        return Err(Error::DataExists {
-            kind,
-            name: src.to_string_lossy().to_string(),
-        });
-    }
-
-    if let Some(parent) = dest.parent() {
-        ensure_dir_exists(parent)?;
-    }
-
-    let result = if src.is_dir() {
-        let options = dir::CopyOptions::new().overwrite(force).content_only(true);
-        dir::copy(src, dest, &options)
-    } else {
-        let options = file::CopyOptions::new().overwrite(force);
-        file::copy(src, dest, &options)
-    };
-
-    result.map_err(Error::from)?;
-    Ok(())
-}
-
-pub(crate) fn delete_data(kind: &'static str, path: &Path) -> Result<(), Error> {
-    if !path.exists() {
-        return Err(Error::DataNotFound {
-            kind,
-            name: path.to_string_lossy().to_string(),
-        });
-    }
-
-    let result = if path.is_dir() {
-        dir::remove(path)
-    } else {
-        file::remove(path)
-    };
-
-    result.map_err(Error::from)
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error("failed to serialize config data")]
+    Serialization(#[from] toml::ser::Error),
+    #[error("failed to deserialize config data")]
+    Deserialization(#[from] toml::de::Error),
 }
