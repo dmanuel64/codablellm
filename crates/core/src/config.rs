@@ -50,7 +50,7 @@ impl Config {
         if !PATH.exists() {
             return Ok(Self::default());
         }
-        toml::from_str(&fs::read_to_string(*PATH)?).into()
+        toml::from_str(&fs::read_to_string(&*PATH)?).map_err(Error::from)
     }
 
     pub fn save(&self) -> Result<(), Error> {

@@ -25,7 +25,7 @@ pub enum Error {
 }
 
 pub enum Format {
-    Storage(storage::Format),
+    File(storage::Format),
     #[cfg(feature = "git")]
     Git,
 }
