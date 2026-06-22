@@ -1,12 +1,16 @@
 use directories::ProjectDirs;
+use flate2::read::GzDecoder;
 use fs_extra::{dir, file};
+use indicatif::ProgressBar;
 use reqwest::blocking::{Client, ClientBuilder, RequestBuilder};
 use std::{
+    fs::File,
     io,
     path::{Path, PathBuf},
     str::FromStr,
     sync::{LazyLock, OnceLock},
 };
+use tar::Archive;
 use thiserror::Error;
 use url::Url;
 
@@ -14,7 +18,6 @@ pub(crate) static APP_DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
     ProjectDirs::from("io.github", "dmanuel64", "codablellm")
         .expect("a home directory to be found on the host system")
 });
-
 
 static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| Client::new());
 
@@ -88,8 +91,8 @@ pub(crate) fn delete_data(kind: &'static str, path: &Path) -> Result<(), Error> 
 }
 
 #[derive(Debug, Clone)]
-pub enum Format {
-    Zip,
+pub enum ArchiveFormat {
+    // Zip,
     Tarball,
 }
 
@@ -108,7 +111,6 @@ impl RemoteFile {
     }
 
     pub fn new_with_options(url: Url, request_options: RequestOptions) -> Self {
-        RequestBuilder::new()
         Self {
             url,
             request_options,
@@ -147,4 +149,46 @@ impl TryFrom<FileSource> for PathBuf {
     }
 }
 
-impl FileSource {}
+pub(crate) fn download_file(
+    src: &RemoteFile,
+    dest: &File,
+    display_progress: bool,
+) -> Result<(), Error> {
+    // Get size of the remote archive
+    let head_response = HTTP_CLIENT.head(src.url.as_ref()).send()?;
+    let repo_size = head_response.content_length();
+    let progress = if !display_progress {
+        ProgressBar::hidden()
+    } else if let Some(s) = repo_size {
+        ProgressBar::new(s)
+    } else {
+        ProgressBar::new_spinner()
+    };
+    // Fetch archive and stream to temporary archive
+    progress.set_message("Fetching repo...");
+    let mut get_response = HTTP_CLIENT.get(src.url.as_ref()).send()?;
+    let mut writer = progress.wrap_write(dest);
+    io::copy(&mut get_response, &mut writer).map_err(|e| Error::Streaming(e))?;
+    Ok(())
+}
+
+pub(crate) fn decompress_archive(
+    archive: &File,
+    dest_dir: &Path,
+    display_progress: bool,
+) -> Result<(), Error> {
+    let progress = if !display_progress {
+        ProgressBar::hidden()
+    } else {
+        ProgressBar::no_length()
+    };
+    progress.set_message("Decompressing repo...");
+    let reader = progress.wrap_read(archive);
+    // TODO: this assumes this will always be a tarball
+    let gz = GzDecoder::new(reader);
+    let mut archive = Archive::new(gz);
+    archive
+        .unpack(dest_dir)
+        .map_err(|e| Error::Decompression(e))?;
+    Ok(())
+}

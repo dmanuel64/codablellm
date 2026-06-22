@@ -1,19 +1,19 @@
 use std::{
-    fs::File,
-    io,
     path::{Path, PathBuf},
     sync::LazyLock,
 };
 
-use flate2::read::GzDecoder;
 use glob::glob;
-use indicatif::ProgressBar;
 use strum::IntoEnumIterator;
-use tar::Archive;
 use tempfile::tempfile;
 use thiserror::Error;
+use url::Url;
 
-use crate::{language::Language, storage};
+use crate::{
+    FileSource,
+    language::Language,
+    storage::{self, RemoteFile},
+};
 
 static LOCAL_REPO_ROOT: LazyLock<PathBuf> =
     LazyLock::new(|| storage::APP_DIRS.cache_dir().join("repos"));
@@ -21,24 +21,29 @@ static LOCAL_REPO_ROOT: LazyLock<PathBuf> =
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to decompress repository")]
-    Decompression(#[source] io::Error),
+    Storage(#[from] storage::Error),
 }
 
 pub enum Format {
-    File(storage::Format),
+    Archive(storage::ArchiveFormat),
     #[cfg(feature = "git")]
     Git,
 }
 
 pub struct Repository {
     path: PathBuf,
+    origin: Option<Url>,
     pub languages: Vec<Language>,
 }
 
 impl Repository {
     pub fn new(path: PathBuf) -> Self {
         let languages = Language::iter().collect();
-        Self { path, languages }
+        Self {
+            path,
+            origin: None,
+            languages,
+        }
     }
 
     pub fn path(&self) -> &Path {
@@ -70,78 +75,19 @@ impl Default for Options {
     }
 }
 
-pub fn pull(repo_url: &str) -> Result<Repository, Error> {
-    pull_with_options(repo_url, Options::default())
+pub fn pull(url: FileSource) -> Result<Repository, Error> {
+    pull_with_options(url, Options::default())
 }
 
-pub fn pull_with_options(repo_url: &str, options: Options) -> Result<Repository, Error> {
+pub fn pull_with_options(url: Url, options: Options) -> Result<Repository, Error> {
     // TODO: check if zipfile or tarfile
-    let local_repo_archive = tempfile().map_err(|e| Error::Streaming(e))?;
-    fetch(
-        repo_url,
-        &local_repo_archive,
-        options.request_builder,
-        options.display_progress,
-    )?;
-    let local_repo_dir = LOCAL_REPO_ROOT.join(url_to_dirname(repo_url));
-    decompress(
-        &local_repo_archive,
-        &local_repo_dir,
-        options.display_progress,
-    )?;
+    let archive = tempfile().map_err(|e| storage::Error::Streaming(e))?;
+    storage::download_file(&RemoteFile::new(url), &archive, options.display_progress)?;
+    let local_repo_dir = LOCAL_REPO_ROOT.join(url_to_path(&url));
+    storage::decompress_archive(&archive, &local_repo_dir, options.display_progress)?;
     Ok(Repository::new(local_repo_dir))
 }
 
-fn fetch(
-    repo_url: &str,
-    dest_file: &File,
-    builder: Option<reqwest::blocking::ClientBuilder>,
-    display_progress: bool,
-) -> Result<(), Error> {
-    // Create HTTP client
-    let client = if let Some(b) = builder {
-        b.build()?
-    } else {
-        reqwest::blocking::Client::new()
-    };
-    // Get size of the remote archive
-    let head_response = client.head(repo_url).send()?;
-    let repo_size = head_response.content_length();
-    let progress = if !display_progress {
-        ProgressBar::hidden()
-    } else if let Some(s) = repo_size {
-        ProgressBar::new(s)
-    } else {
-        ProgressBar::new_spinner()
-    };
-    // Fetch archive and stream to temporary archive
-    progress.set_message("Fetching repo...");
-    let mut get_response = client.get(repo_url).send()?;
-    let mut writer = progress.wrap_write(dest_file);
-    io::copy(&mut get_response, &mut writer).map_err(|e| Error::Streaming(e))?;
-    Ok(())
-}
-
-fn decompress(archive: &File, dest_dir: &Path, display_progress: bool) -> Result<(), Error> {
-    let progress = if !display_progress {
-        ProgressBar::hidden()
-    } else {
-        ProgressBar::no_length()
-    };
-    progress.set_message("Decompressing repo...");
-    let reader = progress.wrap_read(archive);
-    // TODO: this assumes this will always be a tarball
-    let gz = GzDecoder::new(reader);
-    let mut archive = Archive::new(gz);
-    archive
-        .unpack(dest_dir)
-        .map_err(|e| Error::Decompression(e))?;
-    Ok(())
-}
-
-fn url_to_dirname(url: &str) -> String {
-    let stripped = url
-        .trim_start_matches("https://")
-        .trim_start_matches("http://");
-    stripped.replace('/', "-")
+fn url_to_path(url: &Url) -> String {
+    let root = url.host_str().unwrap_or("unknown");
 }
