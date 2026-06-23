@@ -14,11 +14,11 @@ rust-version.workspace = true
 name = "codablellm"
 
 [dependencies]
-anyhow.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 futures-util.workspace = true
 url.workspace = true
+# TODO: swap with tracing or tracing-log
 log.workspace = true
 serde.workspace = true
 toml.workspace = true
@@ -29,7 +29,6 @@ flate2 = "1"
 glob = "0.3"
 indicatif = "0.18"
 rayon = "1"
-reqwest = { version = "0.13", features = ["blocking", "stream"] }
 tar = "0.4"
 tempfile = "3"
 # Tree-sitter and grammars
@@ -43,22 +42,35 @@ tree-sitter-javascript = "0.25"
 tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-typescript = "0.23"
+polars = "0.54"
+fs_extra = "1"
+
 gix = { version = "0.84", optional = true }
 clap = { version = "4", optional = true, default-features = false, features = [
     "derive",
 ] }
-polars = "0.54"
+
 rhai = { version = "1", optional = true }
 starlark = { version = "0.14", optional = true }
 mlua = { version = "0.11", features = ["vendored", "luau"], optional = true }
-fs_extra = "1"
+forgejo-api = { version = "0.10", optional = true }
+octocrab = { version = "0.53", optional = true }
+gitlab = { version = "0.1900", optional = true }
+reqwest = { version = "0.13", features = [
+    "blocking",
+    "stream",
+], optional = true }
 
 [features]
-default = ["rhai"]
-full = ["rhai", "lua", "starlark", "clap", "git"]
+full = ["scripting", "forge"]
+scripting = ["rhai", "lua", "starlark"]
+forge = ["github", "gitlab", "forgejo", "custom-forge"]
 
-git = ["dep:gix"]
-clap = ["dep:clap"]
+value-enums = ["dep:clap"]
 rhai = ["dep:rhai"]
 lua = ["dep:mlua"]
 starlark = ["dep:starlark"]
+github = ["dep:octocrab"]
+gitlab = ["dep:gitlab"]
+forgejo = ["dep:forgejo-api"]
+custom-forge = ["dep:reqwest", "dep:gix"]

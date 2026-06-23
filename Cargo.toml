@@ -24,7 +24,6 @@ rust-version = "1.96"
 [workspace.dependencies]
 codablellm-core = { path = "crates/core" }
 
-anyhow = "1"
 strum = { version = "0.28", features = ["derive"] }
 thiserror = "2"
 futures-util = "0.3"

@@ -15,7 +15,7 @@ name = "codablellm"
 path = "src/main.rs"
 
 [dependencies]
-codablellm-core = { workspace = true, features = ["full"] }
+codablellm-core = { workspace = true, features = ["full", "value-enums"] }
 
 color-eyre.workspace = true
 human-panic.workspace = true

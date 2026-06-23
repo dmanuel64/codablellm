@@ -5,17 +5,12 @@ use std::{
 
 use glob::glob;
 use strum::IntoEnumIterator;
-use tempfile::tempfile;
 use thiserror::Error;
 use url::Url;
 
-use crate::{
-    FileSource,
-    language::Language,
-    storage::{self, RemoteFile},
-};
+use crate::{FileSource, language::Language, storage};
 
-static LOCAL_REPO_ROOT: LazyLock<PathBuf> =
+static REPOS_ROOT: LazyLock<PathBuf> =
     LazyLock::new(|| storage::APP_DIRS.cache_dir().join("repos"));
 
 #[derive(Debug, Error)]
@@ -30,10 +25,56 @@ pub enum Format {
     Git,
 }
 
-pub struct Repository {
-    path: PathBuf,
-    origin: Option<Url>,
+pub enum Repository {
+    #[cfg(any(
+        feature = "github",
+        feature = "gitlab",
+        feature = "forgejo",
+        feature = "custom-forge"
+    ))]
+    Remote(RemoteRepository),
+    Local(PathBuf),
+}
+
+#[cfg(any(
+    feature = "github",
+    feature = "gitlab",
+    feature = "forgejo",
+    feature = "custom-forge"
+))]
+pub struct RemoteRepository {
+    forge: Empty,
+    owner: String,
+    name: String,
+    git_ref: GitRef,
     pub languages: Vec<Language>,
+}
+
+#[cfg(any(
+    feature = "github",
+    feature = "gitlab",
+    feature = "forgejo",
+    feature = "custom-forge"
+))]
+pub enum Forge {
+    #[cfg(feature = "github")]
+    GitHub,
+    #[cfg(feature = "gitlab")]
+    GitLab,
+    #[cfg(feature = "forgejo")]
+    Gitea { base_url: Url },
+    #[cfg(feature = "forgejo")]
+    Forgejo { base_url: Url },
+    #[cfg(feature = "custom-forge")]
+    Custom(Url),
+}
+
+pub enum Empty {}
+
+pub enum GitRef {
+    Branch(String),
+    Tag(String),
+    Commit(String), // worth including if you ever want pinned deps
 }
 
 impl Repository {
@@ -75,19 +116,21 @@ impl Default for Options {
     }
 }
 
-pub fn pull(url: FileSource) -> Result<Repository, Error> {
-    pull_with_options(url, Options::default())
+pub fn fetch(source: FileSource) -> Result<Repository, Error> {
+    fetch_with_options(source, Options::default())
 }
 
-pub fn pull_with_options(url: Url, options: Options) -> Result<Repository, Error> {
+pub fn fetch_with_options(source: FileSource, options: Options) -> Result<Repository, Error> {
+    todo!();
     // TODO: check if zipfile or tarfile
-    let archive = tempfile().map_err(|e| storage::Error::Streaming(e))?;
-    storage::download_file(&RemoteFile::new(url), &archive, options.display_progress)?;
-    let local_repo_dir = LOCAL_REPO_ROOT.join(url_to_path(&url));
-    storage::decompress_archive(&archive, &local_repo_dir, options.display_progress)?;
-    Ok(Repository::new(local_repo_dir))
+    // let archive = tempfile().map_err(|e| storage::Error::Streaming(e))?;
+    // let local_repo_dir = REPOS_ROOT.join(url_to_path(&source));
+    // storage::download_file(&RemoteFile::new(source), &archive, options.display_progress)?;
+    // storage::decompress_archive(&archive, &local_repo_dir, options.display_progress)?;
+    // Ok(Repository::new(local_repo_dir))
 }
 
 fn url_to_path(url: &Url) -> String {
     let root = url.host_str().unwrap_or("unknown");
+    todo!()
 }

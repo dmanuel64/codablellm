@@ -1,24 +1,25 @@
+use clap::{Args, Subcommand};
+use codablellm::config;
 use color_eyre::eyre::Result;
 
 #[derive(Debug, Args)]
 pub struct Command {
     #[clap(subcommand)]
     command: Commands,
-    /// Print the path to the config file and exit
-    #[arg(long, exclusive = true)]
-    pub path: bool,
 }
 
 #[derive(Debug, Subcommand)]
 enum Commands {
     Get,
     Set,
+    PrintPath,
 }
 
 pub fn run(command: Command) -> Result<()> {
-    if command.path {
-        println!("{}", config::path().display());
-        return Ok(());
+    match command.command {
+        Commands::PrintPath => println!("{}", config::PATH.display()),
+        Commands::Get => todo!(),
+        Commands::Set => todo!(),
     }
     Ok(())
 }
