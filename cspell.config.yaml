@@ -24,6 +24,7 @@ words:
   - mlua
   - modeline
   - modelines
+  - octocrab
   - pyfunction
   - pymodule
   - reqwest

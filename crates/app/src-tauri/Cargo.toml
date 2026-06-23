@@ -9,6 +9,7 @@ homepage.workspace = true
 license.workspace = true
 rust-version.workspace = true
 edition.workspace = true
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -23,7 +24,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-codablellm-core = { workspace = true, features = ["full"] }
+codablellm = { workspace = true, features = ["full"] }
 
 mimalloc.workspace = true
 

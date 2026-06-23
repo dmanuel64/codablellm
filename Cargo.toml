@@ -22,7 +22,7 @@ rust-version = "1.96"
 
 
 [workspace.dependencies]
-codablellm-core = { path = "crates/core" }
+codablellm = { path = "crates/core" }
 
 strum = { version = "0.28", features = ["derive"] }
 thiserror = "2"

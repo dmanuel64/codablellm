@@ -1,5 +1,5 @@
 [package]
-name = "codablellm-core"
+name = "codablellm"
 version.workspace = true
 edition.workspace = true
 description.workspace = true
@@ -9,9 +9,6 @@ keywords.workspace = true
 homepage.workspace = true
 license.workspace = true
 rust-version.workspace = true
-
-[lib]
-name = "codablellm"
 
 [dependencies]
 strum.workspace = true

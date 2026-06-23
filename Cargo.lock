@@ -1043,47 +1043,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "codablellm-app"
-version = "0.1.0"
-dependencies = [
- "codablellm-core",
- "mimalloc",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
-]
-
-[[package]]
-name = "codablellm-app-ui"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "js-sys",
- "leptos",
- "serde",
- "serde-wasm-bindgen",
- "wasm-bindgen",
- "wasm-bindgen-futures",
-]
-
-[[package]]
-name = "codablellm-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "codablellm-core",
- "color-eyre",
- "env_logger",
- "human-panic",
- "log",
- "mimalloc",
- "strum",
-]
-
-[[package]]
-name = "codablellm-core"
+name = "codablellm"
 version = "2.0.0"
 dependencies = [
  "bollard",
@@ -1125,10 +1085,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "codablellm-app"
+version = "0.1.0"
+dependencies = [
+ "codablellm",
+ "mimalloc",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+]
+
+[[package]]
+name = "codablellm-app-ui"
+version = "0.1.0"
+dependencies = [
+ "console_error_panic_hook",
+ "js-sys",
+ "leptos",
+ "serde",
+ "serde-wasm-bindgen",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+]
+
+[[package]]
+name = "codablellm-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "codablellm",
+ "color-eyre",
+ "env_logger",
+ "human-panic",
+ "log",
+ "mimalloc",
+ "strum",
+]
+
+[[package]]
 name = "codablellm-pyo3"
 version = "2.0.0"
 dependencies = [
- "codablellm-core",
+ "codablellm",
  "pyo3",
 ]
 
