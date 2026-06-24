@@ -42,7 +42,7 @@ pub enum Repository {
     feature = "custom-forge"
 ))]
 pub struct RemoteRepository {
-    forge: Empty,
+    forge: Forge,
     owner: String,
     name: String,
     git_ref: GitRef,
@@ -68,12 +68,26 @@ pub enum Forge {
     Custom(Url),
 }
 
-pub enum Empty {}
-
 pub enum GitRef {
     Branch(String),
     Tag(String),
     Commit(String), // worth including if you ever want pinned deps
+}
+
+impl GitRef {
+    pub fn main_branch() -> Self {
+        Self::Branch("main".to_string())
+    }
+
+    pub fn master_branch() -> Self {
+        Self::Branch("master".to_string())
+    }
+}
+
+impl Default for GitRef {
+    fn default() -> Self {
+        Self::main_branch()
+    }
 }
 
 impl Repository {

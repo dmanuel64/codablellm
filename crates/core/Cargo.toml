@@ -10,6 +10,10 @@ homepage.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 strum.workspace = true
 thiserror.workspace = true
@@ -44,6 +48,7 @@ fs_extra = "1"
 
 gix = { version = "0.84", optional = true }
 clap = { version = "4", optional = true, default-features = false, features = [
+    "std",
     "derive",
 ] }
 
@@ -64,10 +69,11 @@ scripting = ["rhai", "lua", "starlark"]
 forge = ["github", "gitlab", "forgejo", "custom-forge"]
 
 value-enums = ["dep:clap"]
+git = ["dep:gix"]
 rhai = ["dep:rhai"]
 lua = ["dep:mlua"]
 starlark = ["dep:starlark"]
 github = ["dep:octocrab"]
 gitlab = ["dep:gitlab"]
 forgejo = ["dep:forgejo-api"]
-custom-forge = ["dep:reqwest", "dep:gix"]
+custom-forge = ["dep:reqwest", "git"]
