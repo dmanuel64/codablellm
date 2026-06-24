@@ -21,7 +21,8 @@ color-eyre.workspace = true
 human-panic.workspace = true
 strum.workspace = true
 mimalloc.workspace = true
-log.workspace = true
+tracing.workspace = true
 
 clap = { version = "4", features = ["derive"] }
-env_logger = "0.11"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"

@@ -31,6 +31,6 @@ color-eyre = "0.6"
 human-panic = "2"
 url = { version = "2.5", features = ["serde"] }
 mimalloc = "0.1"
-log = "0.4"
 serde = { version = "1", features = ["derive"] }
 toml = "1"
+tracing = "0.1"

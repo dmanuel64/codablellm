@@ -10,8 +10,7 @@ use url::Url;
 
 use crate::{FileSource, language::Language, storage};
 
-static REPOS_ROOT: LazyLock<PathBuf> =
-    LazyLock::new(|| storage::APP_DIRS.cache_dir().join("repos"));
+static REPOS_ROOT: LazyLock<PathBuf> = LazyLock::new(|| storage::CACHE_DIR.join("repos"));
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -79,25 +78,21 @@ pub enum GitRef {
 
 impl Repository {
     pub fn new(path: PathBuf) -> Self {
-        let languages = Language::iter().collect();
-        Self {
-            path,
-            origin: None,
-            languages,
-        }
+        todo!()
     }
 
     pub fn path(&self) -> &Path {
-        &self.path
+        todo!()
     }
 
     pub fn source_files(&self) -> Vec<PathBuf> {
-        let mut paths = Vec::new();
-        for ext in self.languages.iter().flat_map(|l| l.file_extensions()) {
-            let pattern = format!("{}/**/*.{}", self.path.display(), ext);
-            paths.extend(glob(&pattern).unwrap().flatten());
-        }
-        paths
+        todo!()
+        // let mut paths = Vec::new();
+        // for ext in self.languages.iter().flat_map(|l| l.file_extensions()) {
+        //     let pattern = format!("{}/**/*.{}", self.path.display(), ext);
+        //     paths.extend(glob(&pattern).unwrap().flatten());
+        // }
+        // paths
     }
 }
 

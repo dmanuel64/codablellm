@@ -8,11 +8,9 @@ use thiserror::Error;
 
 use crate::{function::Function, storage};
 
-pub static DATASETS_DIR: LazyLock<PathBuf> =
-    LazyLock::new(|| storage::APP_DIRS.data_local_dir().join("datasets"));
+pub static DATASETS_DIR: LazyLock<PathBuf> = LazyLock::new(|| storage::DATA_DIR.join("datasets"));
 
-pub static SCRIPTS_DIR: LazyLock<PathBuf> =
-    LazyLock::new(|| storage::APP_DIRS.data_local_dir().join("scripts"));
+pub static SCRIPTS_DIR: LazyLock<PathBuf> = LazyLock::new(|| storage::DATA_DIR.join("scripts"));
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -75,7 +73,7 @@ impl Dataset for BinaryDataset {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "value-enums", derive(clap::ValueEnum))]
 pub enum ScriptHook {
     Pre,
     #[default]
@@ -83,7 +81,7 @@ pub enum ScriptHook {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "value-enums", derive(clap::ValueEnum))]
 pub enum ScriptEngine {
     #[default]
     Auto,

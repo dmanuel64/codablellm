@@ -1,4 +1,4 @@
-use crate::storage::APP_DIRS;
+use crate::storage;
 use serde::{Deserialize, Serialize};
 use std::{
     fs, io,
@@ -7,15 +7,14 @@ use std::{
 };
 use thiserror::Error;
 
-pub static PATH: LazyLock<PathBuf> =
-    LazyLock::new(|| APP_DIRS.config_local_dir().join("config.toml"));
+pub static PATH: LazyLock<PathBuf> = LazyLock::new(|| storage::CONFIG_DIR.join("config.toml"));
 
 static CONFIG: LazyLock<RwLock<Config>> = LazyLock::new(|| {
     RwLock::new(
         Config::load()
-            .inspect_err(|e| {
-                log::debug!("{e}");
-                log::error!(
+            .inspect_err(|error| {
+                tracing::error!(
+                    %error,
                     "Failed to load CodableLLM config - using default configuration options"
                 );
             })

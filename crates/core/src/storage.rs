@@ -14,10 +14,15 @@ use tar::Archive;
 use thiserror::Error;
 use url::Url;
 
-pub(crate) static APP_DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
+static DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
     ProjectDirs::from("io.github", "dmanuel64", "codablellm")
         .expect("a home directory to be found on the host system")
 });
+pub static DATA_DIR: LazyLock<&Path> = LazyLock::new(|| DIRS.data_local_dir());
+pub static CONFIG_DIR: LazyLock<&Path> = LazyLock::new(|| DIRS.config_local_dir());
+pub static CACHE_DIR: LazyLock<&Path> = LazyLock::new(|| DIRS.cache_dir());
+pub static STATE_DIR: LazyLock<&Path> =
+    LazyLock::new(|| DIRS.state_dir().unwrap_or_else(|| &*CACHE_DIR));
 
 static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| Client::new());
 

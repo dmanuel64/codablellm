@@ -9,22 +9,22 @@ pub struct Options {
 }
 
 #[derive(Debug, Clone, Display, EnumIter)]
-#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[cfg_attr(feature = "value-enums", derive(clap::ValueEnum))]
 pub enum Language {
     C,
     #[strum(serialize = "C++")]
-    #[cfg_attr(feature = "clap", clap(name = "c++"))]
+    #[cfg_attr(feature = "value-enums", clap(name = "c++"))]
     Cpp,
     Python,
-    #[cfg_attr(feature = "clap", clap(name = "javascript"))]
+    #[cfg_attr(feature = "value-enums", clap(name = "javascript"))]
     JavaScript,
-    #[cfg_attr(feature = "clap", clap(name = "typescript"))]
+    #[cfg_attr(feature = "value-enums", clap(name = "typescript"))]
     TypeScript,
     Go,
     Rust,
     Java,
     #[strum(serialize = "C#")]
-    #[cfg_attr(feature = "clap", clap(name = "c#"))]
+    #[cfg_attr(feature = "value-enums", clap(name = "c#"))]
     CSharp,
 }
 

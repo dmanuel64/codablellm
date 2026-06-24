@@ -1,8 +1,9 @@
 use std::{collections::HashSet, mem, path::PathBuf};
 
 use indicatif::ProgressBar;
-use strum::{Display, EnumCount};
+use strum::{Display, EnumCount, EnumIter, IntoEnumIterator};
 use thiserror::Error;
+use tracing::instrument;
 
 use crate::{FileSource, builder, dataset, decompiler, extractor, language, mapper, repo, storage};
 
@@ -31,9 +32,15 @@ impl Manager {
     pub fn new(source: FileSource, mode: Mode, display_progress: bool) -> Self {
         let progress = if display_progress {
             ProgressBar::new(if let Mode::SourceOnly = mode {
-                3
+                Stage::COUNT as u64
+                    - Stage::iter().fold(
+                        0,
+                        |acc, s| {
+                            if s.is_binary_stage() { acc + 1 } else { acc }
+                        },
+                    )
             } else {
-                Stage::COUNT as u64 - 1
+                Stage::COUNT as u64
             })
         } else {
             ProgressBar::hidden()
@@ -85,19 +92,22 @@ impl Manager {
 
     /// Some docstring
     pub fn run(&mut self) -> Result<PathBuf, Error> {
-        log::info!("Starting pipeline");
+        tracing::info!("Starting pipeline");
         loop {
             if let Stage::Complete = self.stage {
                 break;
             }
             let event = self.step()?;
-            log::debug!("Pipeline event received: {event:?}");
+            tracing::debug!(
+                %event,
+                "Pipeline event received"
+            );
             let prev_stage = self.stage;
             if let Event::SourceCodeExtracted = event
                 && let Mode::SourceOnly = self.mode
             {
                 // Skip to create dataset stage
-                log::debug!(
+                tracing::debug!(
                     "Current pipeline mode is source code only - skipping to dataset creation stage"
                 );
                 self.stage = Stage::CreateDataset
@@ -105,13 +115,17 @@ impl Manager {
                 self.stage.transition(event)?;
             }
             self.progress.inc(1);
-            log::info!("Pipeline transitioned from {prev_stage} -> {}", self.stage);
+            tracing::info!(
+                %prev_stage,
+                current_stage = %self.stage,
+                "Pipeline transitioned"
+            );
         }
         todo!("path to dataset")
     }
 }
 
-#[derive(Debug, Copy, Clone, Display, EnumCount)]
+#[derive(Debug, Copy, Clone, Display, EnumCount, EnumIter)]
 pub enum Stage {
     Pulling,
     ExtractSourceCode,
@@ -126,6 +140,13 @@ pub enum Stage {
 impl Stage {
     pub fn start() -> Stage {
         Self::Pulling
+    }
+
+    pub fn is_binary_stage(&self) -> bool {
+        match self {
+            Self::Pulling | Self::ExtractSourceCode | Self::CreateDataset | Self::Complete => false,
+            Self::SetupBuilder | Self::BuildCode | Self::DecompileBinaries | Self::MapCode => true,
+        }
     }
 
     pub fn transition(&mut self, event: Event) -> Result<(), Error> {
@@ -205,11 +226,12 @@ pub fn run(source: FileSource, mode: Mode) -> Result<PathBuf, Error> {
     run_with_options(source, mode, &Options::default())
 }
 
+#[instrument(name = "pipeline", skip(options))]
 pub fn run_with_options(
     source: FileSource,
     mode: Mode,
     options: &Options,
 ) -> Result<PathBuf, Error> {
-    log::trace!("Pipeline mode: {mode:?}; pipeline options: {options:#?}");
+    tracing::trace!(?options);
     Manager::new(source, mode, options.display_progress).run()
 }
