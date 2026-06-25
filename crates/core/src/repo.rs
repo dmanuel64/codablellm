@@ -18,60 +18,76 @@ pub enum Error {
     Storage(#[from] storage::Error),
 }
 
-pub enum Format {
-    Archive(storage::ArchiveFormat),
-    #[cfg(feature = "git")]
-    Git,
+pub struct Repository {
+    pub path: PathBuf,
+    pub source: Source,
 }
 
-pub enum Repository {
-    #[cfg(any(
-        feature = "github",
-        feature = "gitlab",
-        feature = "forgejo",
-        feature = "custom-forge"
-    ))]
-    Remote(RemoteRepository),
-    Local(PathBuf),
+pub enum Source {
+    Remote { metadata: Metadata, forge: Forge },
+    Local { metadata: Metadata, path: PathBuf },
 }
 
-#[cfg(any(
-    feature = "github",
-    feature = "gitlab",
-    feature = "forgejo",
-    feature = "custom-forge"
-))]
-pub struct RemoteRepository {
-    forge: Forge,
-    owner: String,
-    name: String,
-    git_ref: GitRef,
-    pub languages: Vec<Language>,
+impl Source {
+    pub fn dest_path(&self) -> PathBuf {
+        match self {
+            Source::Remote { metadata, forge } => {
+                storage::DATA_DIR.join(forge.slug()).join(format!(
+                    "{}-{}-{}",
+                    metadata.owner,
+                    metadata.name,
+                    metadata.git_ref.as_str()
+                ))
+            }
+            Source::Local { metadata, path } => storage::DATA_DIR.join("local").join(format!(
+                "{}-{}-{}",
+                metadata.owner,
+                metadata.name,
+                metadata.git_ref.as_str()
+            )),
+        }
+    }
 }
 
-#[cfg(any(
-    feature = "github",
-    feature = "gitlab",
-    feature = "forgejo",
-    feature = "custom-forge"
-))]
+pub struct Metadata {
+    pub owner: String,
+    pub name: String,
+    pub git_ref: GitRef,
+}
+
 pub enum Forge {
     #[cfg(feature = "github")]
     GitHub,
     #[cfg(feature = "gitlab")]
     GitLab,
     #[cfg(feature = "forgejo")]
-    Gitea { base_url: Url },
-    #[cfg(feature = "forgejo")]
     Forgejo { base_url: Url },
+    #[cfg(feature = "forgejo")]
+    Gitea { base_url: Url },
     #[cfg(feature = "custom-forge")]
-    Custom(Url),
+    Custom { base_url: Url },
 }
 
+impl Forge {
+    pub fn slug(&self) -> &str {
+        match self {
+            Forge::GitHub => "github.com",
+            Forge::GitLab => "gitlab.com",
+            Forge::Forgejo { base_url } | Forge::Gitea { base_url } => {
+                // TODO: should return error
+                base_url.host_str().unwrap_or("unknown")
+            }
+            // TODO: should return error
+            Forge::Custom { base_url } => base_url.host_str().unwrap_or("custom"),
+        }
+    }
+}
+
+// TODO: evaluate whether this should stay as an enum or new-type struct
 pub enum GitRef {
     Branch(String),
     Tag(String),
-    Commit(String), // worth including if you ever want pinned deps
+    Commit(String),
 }
 
 impl GitRef {
@@ -90,26 +106,6 @@ impl Default for GitRef {
     }
 }
 
-impl Repository {
-    pub fn new(path: PathBuf) -> Self {
-        todo!()
-    }
-
-    pub fn path(&self) -> &Path {
-        todo!()
-    }
-
-    pub fn source_files(&self) -> Vec<PathBuf> {
-        todo!()
-        // let mut paths = Vec::new();
-        // for ext in self.languages.iter().flat_map(|l| l.file_extensions()) {
-        //     let pattern = format!("{}/**/*.{}", self.path.display(), ext);
-        //     paths.extend(glob(&pattern).unwrap().flatten());
-        // }
-        // paths
-    }
-}
-
 #[derive(Debug)]
 pub struct Options {
     pub display_progress: bool,
@@ -125,21 +121,22 @@ impl Default for Options {
     }
 }
 
-pub fn fetch(source: FileSource) -> Result<Repository, Error> {
+pub fn fetch(source: Source) -> Result<Repository, Error> {
     fetch_with_options(source, Options::default())
 }
 
-pub fn fetch_with_options(source: FileSource, options: Options) -> Result<Repository, Error> {
-    todo!();
-    // TODO: check if zipfile or tarfile
-    // let archive = tempfile().map_err(|e| storage::Error::Streaming(e))?;
-    // let local_repo_dir = REPOS_ROOT.join(url_to_path(&source));
-    // storage::download_file(&RemoteFile::new(source), &archive, options.display_progress)?;
-    // storage::decompress_archive(&archive, &local_repo_dir, options.display_progress)?;
-    // Ok(Repository::new(local_repo_dir))
-}
-
-fn url_to_path(url: &Url) -> String {
-    let root = url.host_str().unwrap_or("unknown");
-    todo!()
+pub fn fetch_with_options(source: Source, options: Options) -> Result<Repository, Error> {
+    match repository {
+        Repository::Local(path) => Ok(Repository::Local(path)),
+        #[cfg(any(
+            feature = "github",
+            feature = "gitlab",
+            feature = "forgejo",
+            feature = "custom-forge"
+        ))]
+        Repository::Remote(remote) => {
+            let local_path = fetch_remote(&remote, &options)?;
+            Ok(Repository::Local(local_path))
+        }
+    }
 }
