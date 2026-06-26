@@ -15,4 +15,5 @@ pub mod storage;
 pub use language::Language;
 pub use pipeline::Error as CodablellmError;
 pub use pipeline::{Mode, Options, run, run_with_options};
+pub use repo::{Forge, GitRef, Metadata as RepoMetadata, Source as RepoSource};
 pub use storage::FileSource;

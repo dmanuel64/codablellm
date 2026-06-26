@@ -95,12 +95,6 @@ pub(crate) fn delete_data(kind: &'static str, path: &Path) -> Result<(), Error> 
     result.map_err(Error::from)
 }
 
-#[derive(Debug, Clone)]
-pub enum ArchiveFormat {
-    // Zip,
-    Tarball,
-}
-
 #[derive(Debug, Clone, Default)]
 pub struct RequestOptions {}
 

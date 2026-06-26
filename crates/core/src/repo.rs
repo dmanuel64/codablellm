@@ -3,12 +3,13 @@ use std::{
     sync::LazyLock,
 };
 
+use gitlab::api::Query;
 use glob::glob;
 use strum::IntoEnumIterator;
 use thiserror::Error;
 use url::Url;
 
-use crate::{FileSource, language::Language, storage};
+use crate::{FileSource, Forge::GitLab, language::Language, storage};
 
 static REPOS_ROOT: LazyLock<PathBuf> = LazyLock::new(|| storage::CACHE_DIR.join("repos"));
 
@@ -24,8 +25,20 @@ pub struct Repository {
 }
 
 pub enum Source {
-    Remote { metadata: Metadata, forge: Forge },
-    Local { metadata: Metadata, path: PathBuf },
+    #[cfg(any(
+        feature = "github",
+        feature = "gitlab",
+        feature = "forgejo",
+        feature = "custom-forge"
+    ))]
+    Remote {
+        metadata: Metadata,
+        forge: Forge,
+    },
+    Local {
+        metadata: Metadata,
+        path: PathBuf,
+    },
 }
 
 impl Source {
@@ -55,6 +68,12 @@ pub struct Metadata {
     pub git_ref: GitRef,
 }
 
+#[cfg(any(
+    feature = "github",
+    feature = "gitlab",
+    feature = "forgejo",
+    feature = "custom-forge"
+))]
 pub enum Forge {
     #[cfg(feature = "github")]
     GitHub,
@@ -88,6 +107,14 @@ pub enum GitRef {
     Branch(String),
     Tag(String),
     Commit(String),
+}
+
+impl ToString for GitRef {
+    fn to_string(&self) -> String {
+        match self {
+            GitRef::Branch(c) | GitRef::Commit(c) | GitRef::Tag(c) => c.clone(),
+        }
+    }
 }
 
 impl GitRef {
@@ -126,17 +153,88 @@ pub fn fetch(source: Source) -> Result<Repository, Error> {
 }
 
 pub fn fetch_with_options(source: Source, options: Options) -> Result<Repository, Error> {
-    match repository {
-        Repository::Local(path) => Ok(Repository::Local(path)),
+    match source {
+        Source::Local { metadata, path } => Ok(Source::Local(path)),
         #[cfg(any(
             feature = "github",
             feature = "gitlab",
             feature = "forgejo",
             feature = "custom-forge"
         ))]
-        Repository::Remote(remote) => {
-            let local_path = fetch_remote(&remote, &options)?;
-            Ok(Repository::Local(local_path))
+        Source::Remote { metadata, forge } => {
+            let local_path = fetch_remote(&metadata, &forge)?;
+            Ok(Source::Local(local_path))
         }
     }
+}
+
+#[cfg(any(
+    feature = "github",
+    feature = "gitlab",
+    feature = "forgejo",
+    feature = "custom-forge"
+))]
+fn fetch_remote(metadata: &Metadata, forge: &Forge) -> Result<Repository, Error> {
+    match forge {
+        #[cfg(feature = "github")]
+        Forge::GitHub => fetch_from_github(metadata),
+        #[cfg(feature = "gitlab")]
+        Forge::GitLab => fetch_from_gitlab(metadata),
+        #[cfg(feature = "forgejo")]
+        Forge::Forgejo { base_url } => todo!(),
+        #[cfg(feature = "forgejo")]
+        Forge::Gitea { base_url } => todo!(),
+        #[cfg(feature = "custom-forge")]
+        Forge::Custom { base_url } => todo!(),
+    }
+}
+
+#[cfg(feature = "github")]
+fn fetch_from_github(metadata: &Metadata) -> Result<Repository, Error> {
+    let octocrab = octocrab::instance();
+    let repo = octocrab.repos(metadata.owner, metadata.name);
+    repo.download_tarball(metadata.git_ref.to_string());
+}
+
+#[cfg(feature = "gitlab")]
+fn fetch_from_gitlab(metadata: &Metadata) -> Result<Repository, Error> {
+    use gitlab::{
+        Gitlab,
+        api::projects::repository::{Archive, ArchiveFormat},
+    };
+
+    // TODO: inject token properly rather than hardcoding
+    let client = Gitlab::new("gitlab.com", "private-token").map_err(Error::GitLab)?;
+    let endpoint = Archive::builder()
+        .project(format!("{}/{}", metadata.owner, metadata.name))
+        .sha(metadata.git_ref.to_string())
+        .format(ArchiveFormat::TarGz)
+        .build()
+        .map_err(Error::GitLabBuilder)?;
+
+    // `raw` returns the bytes directly instead of deserializing JSON
+    let bytes: Vec<u8> = gitlab::api::raw(endpoint)
+        .query(&client)
+        .map_err(Error::GitLabQuery)?;
+
+    extract_tarball_from_bytes(&bytes, dest)
+}
+
+#[cfg(feature = "forgejo")]
+fn fetch_from_forgejo(metadata: &Metadata) -> Result<Repository, Error> {
+    use forgejo_api::{Auth, Forgejo};
+
+    // Use Auth::Basic or Auth::Token if the repo is private
+    let api = Forgejo::new(Auth::None, base_url.clone()).map_err(Error::Forgejo)?;
+
+    // get_archive is a blocking call returning bytes
+    let bytes = api
+        .repo_get_archive(
+            &metadata.owner,
+            &metadata.name,
+            &metadata.git_ref.to_string(),
+        )
+        .map_err(Error::Forgejo)?;
+
+    extract_tarball_from_bytes(&bytes, dest)
 }
