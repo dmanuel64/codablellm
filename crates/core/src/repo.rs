@@ -17,11 +17,25 @@ static REPOS_ROOT: LazyLock<PathBuf> = LazyLock::new(|| storage::CACHE_DIR.join(
 pub enum Error {
     #[error("failed to decompress repository")]
     Storage(#[from] storage::Error),
+    #[error("")]
+    Test,
 }
 
 pub struct Repository {
     pub path: PathBuf,
     pub source: Source,
+    pub languages: Vec<Language>,
+}
+
+impl Repository {
+    pub fn source_files(&self) -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+        for ext in self.languages.iter().flat_map(Language::file_extensions) {
+            let pattern = format!("{}/**/*.{}", self.path.display(), ext);
+            paths.extend(glob(&pattern).unwrap().flatten());
+        }
+        paths
+    }
 }
 
 pub enum Source {
@@ -49,14 +63,14 @@ impl Source {
                     "{}-{}-{}",
                     metadata.owner,
                     metadata.name,
-                    metadata.git_ref.as_str()
+                    metadata.git_ref.to_string()
                 ))
             }
             Source::Local { metadata, path } => storage::DATA_DIR.join("local").join(format!(
                 "{}-{}-{}",
                 metadata.owner,
                 metadata.name,
-                metadata.git_ref.as_str()
+                metadata.git_ref.to_string()
             )),
         }
     }
@@ -154,7 +168,7 @@ pub fn fetch(source: Source) -> Result<Repository, Error> {
 
 pub fn fetch_with_options(source: Source, options: Options) -> Result<Repository, Error> {
     match source {
-        Source::Local { metadata, path } => Ok(Source::Local(path)),
+        Source::Local { metadata, path } => Ok(todo!("local path")),
         #[cfg(any(
             feature = "github",
             feature = "gitlab",
@@ -163,7 +177,7 @@ pub fn fetch_with_options(source: Source, options: Options) -> Result<Repository
         ))]
         Source::Remote { metadata, forge } => {
             let local_path = fetch_remote(&metadata, &forge)?;
-            Ok(Source::Local(local_path))
+            Ok(todo!("local path"))
         }
     }
 }
@@ -192,8 +206,9 @@ fn fetch_remote(metadata: &Metadata, forge: &Forge) -> Result<Repository, Error>
 #[cfg(feature = "github")]
 fn fetch_from_github(metadata: &Metadata) -> Result<Repository, Error> {
     let octocrab = octocrab::instance();
-    let repo = octocrab.repos(metadata.owner, metadata.name);
+    let repo = octocrab.repos(metadata.owner.to_string(), metadata.name.to_string());
     repo.download_tarball(metadata.git_ref.to_string());
+    todo!("local path")
 }
 
 #[cfg(feature = "gitlab")]
@@ -204,20 +219,20 @@ fn fetch_from_gitlab(metadata: &Metadata) -> Result<Repository, Error> {
     };
 
     // TODO: inject token properly rather than hardcoding
-    let client = Gitlab::new("gitlab.com", "private-token").map_err(Error::GitLab)?;
+    let client = Gitlab::new("gitlab.com", "private-token").map_err(|e| Error::Test)?;
     let endpoint = Archive::builder()
         .project(format!("{}/{}", metadata.owner, metadata.name))
         .sha(metadata.git_ref.to_string())
         .format(ArchiveFormat::TarGz)
         .build()
-        .map_err(Error::GitLabBuilder)?;
+        .map_err(|e| Error::Test)?;
 
     // `raw` returns the bytes directly instead of deserializing JSON
     let bytes: Vec<u8> = gitlab::api::raw(endpoint)
         .query(&client)
-        .map_err(Error::GitLabQuery)?;
+        .map_err(|e| Error::Test)?;
 
-    extract_tarball_from_bytes(&bytes, dest)
+    todo!("extract_tarball_from_bytes(&bytes, dest)")
 }
 
 #[cfg(feature = "forgejo")]
@@ -225,16 +240,15 @@ fn fetch_from_forgejo(metadata: &Metadata) -> Result<Repository, Error> {
     use forgejo_api::{Auth, Forgejo};
 
     // Use Auth::Basic or Auth::Token if the repo is private
-    let api = Forgejo::new(Auth::None, base_url.clone()).map_err(Error::Forgejo)?;
+    let api = Forgejo::new(Auth::None, todo!("base url")).map_err(|e| Error::Test)?;
 
     // get_archive is a blocking call returning bytes
-    let bytes = api
-        .repo_get_archive(
-            &metadata.owner,
-            &metadata.name,
-            &metadata.git_ref.to_string(),
-        )
-        .map_err(Error::Forgejo)?;
+    let bytes = api.repo_get_archive(
+        &metadata.owner,
+        &metadata.name,
+        &metadata.git_ref.to_string(),
+    );
+    // .map_err(|e| Error::Test)?;
 
-    extract_tarball_from_bytes(&bytes, dest)
+    todo!("extract_tarball_from_bytes(&bytes, dest)")
 }
