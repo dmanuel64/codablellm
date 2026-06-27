@@ -1,10 +1,12 @@
-use crate::storage;
+use crate::{Language, storage};
 use serde::{Deserialize, Serialize};
 use std::{
+    fmt::Display,
     fs, io,
     path::PathBuf,
     sync::{LazyLock, RwLock},
 };
+use strum::IntoEnumIterator;
 use thiserror::Error;
 
 pub static PATH: LazyLock<PathBuf> = LazyLock::new(|| storage::CONFIG_DIR.join("config.toml"));
@@ -36,9 +38,11 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct Config {
     pub display: DisplayConfig,
     pub forge: ForgeConfig,
+    pub languages: LanguagesConfig,
 }
 
 impl Config {
@@ -56,7 +60,18 @@ impl Config {
     }
 }
 
+impl Display for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            toml::to_string_pretty(self).unwrap_or_else(|_| format!("{:#?}", self))
+        )
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct DisplayConfig {
     pub progress: bool,
     pub console_log_level: LogLevel,
@@ -74,6 +89,7 @@ impl Default for DisplayConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 #[cfg_attr(feature = "value-enums", derive(clap::ValueEnum))]
 pub enum LogLevel {
     Off,
@@ -125,9 +141,26 @@ impl From<u8> for LogLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
 pub struct ForgeConfig {
     pub github_token: Option<String>,
     pub gitlab_token: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct LanguagesConfig {
+    pub headers_as_cpp: bool,
+    pub include: Vec<String>,
+}
+
+impl Default for LanguagesConfig {
+    fn default() -> Self {
+        Self {
+            headers_as_cpp: false,
+            include: Language::iter().map(|l| l.to_string()).collect(),
+        }
+    }
 }
 
 #[derive(Debug, Error)]

@@ -1,5 +1,5 @@
 use clap::{Args, Subcommand};
-use codablellm::config;
+use codablellm::{Language, config};
 use color_eyre::eyre::Result;
 
 #[derive(Debug, Args)]
@@ -52,11 +52,24 @@ enum Commands {
         #[clap(flatten)]
         common: ConfigOpts,
     },
+    #[command(name = "languages.headers-as-cpp")]
+    LanguagesHeadersAsCpp {
+        #[arg(action = clap::ArgAction::Set)]
+        enable: Option<bool>,
+        #[clap(flatten)]
+        common: ConfigOpts,
+    },
+    #[command(name = "languages.include")]
+    Languages {
+        langs: Option<Vec<Language>>,
+        #[clap(flatten)]
+        common: ConfigOpts,
+    },
 }
 
 pub fn run(command: Command) -> Result<()> {
     if command.show_all {
-        println!("{:#?}", config::get());
+        println!("{}", config::get());
         return Ok(());
     } else if command.show_path {
         println!("{}", config::PATH.display());

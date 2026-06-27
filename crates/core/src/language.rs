@@ -9,10 +9,11 @@ pub struct Options {
 }
 
 #[derive(Debug, Clone, Display, EnumIter)]
+#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
 #[cfg_attr(feature = "value-enums", derive(clap::ValueEnum))]
 pub enum Language {
     C,
-    #[strum(serialize = "C++")]
+    #[strum(serialize = "c++")]
     #[cfg_attr(feature = "value-enums", clap(name = "c++"))]
     Cpp,
     Python,
@@ -23,7 +24,7 @@ pub enum Language {
     Go,
     Rust,
     Java,
-    #[strum(serialize = "C#")]
+    #[strum(serialize = "c#")]
     #[cfg_attr(feature = "value-enums", clap(name = "c#"))]
     CSharp,
 }
