@@ -41,7 +41,7 @@ where
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", default)]
 pub struct Config {
     pub display: DisplayConfig,
     pub forge: ForgeConfig,
@@ -49,7 +49,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load() -> Result<Self> {
+    fn load() -> Result<Self> {
         if !PATH.exists() {
             return Ok(Self::default());
         }
@@ -57,7 +57,7 @@ impl Config {
         Ok(config)
     }
 
-    pub fn save(&self) -> Result<()> {
+    fn save(&self) -> Result<()> {
         let contents = toml::to_string_pretty(self)?;
         fs::write(&*PATH, contents)?;
         Ok(())
@@ -75,7 +75,7 @@ impl Display for Config {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", default)]
 pub struct DisplayConfig {
     pub progress: bool,
     pub console_log_level: LogLevel,
@@ -144,14 +144,14 @@ impl From<u8> for LogLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", default)]
 pub struct ForgeConfig {
     pub github_token: Option<String>,
     pub gitlab_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", default)]
 pub struct LanguagesConfig {
     pub headers_as_cpp: bool,
     pub include: Vec<String>,
