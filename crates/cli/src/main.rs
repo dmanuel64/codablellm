@@ -7,10 +7,12 @@ mod get;
 use std::io;
 
 use clap::{ArgAction, Parser, Subcommand};
-use codablellm::{config::LogLevel, storage};
+use codablellm::storage;
 use color_eyre::eyre::Result;
 use mimalloc::MiMalloc;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+
+use crate::config::LogLevel;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -21,7 +23,7 @@ struct Cli {
     #[clap(subcommand)]
     command: Commands,
     /// Number of times to greet
-    #[arg(short, long, action = ArgAction::Count, default_value_t = codablellm::config::get().display.console_log_level.into())]
+    #[arg(short, long, action = ArgAction::Count, default_value_t = config::get().display.console_log_level.into())]
     verbose: u8,
 }
 
@@ -39,7 +41,7 @@ fn install_error_handlers() -> Result<()> {
 
 pub fn init_logger(verbosity: u8) -> tracing_appender::non_blocking::WorkerGuard {
     let console_level: LogLevel = verbosity.into();
-    let file_level = codablellm::config::get().display.file_log_level;
+    let file_level = config::get().display.file_log_level;
 
     let file_appender = tracing_appender::rolling::never(*storage::STATE_DIR, "codablellm.log");
     let (non_blocking_writer, guard) = tracing_appender::non_blocking(file_appender);

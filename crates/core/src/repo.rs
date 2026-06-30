@@ -5,11 +5,10 @@ use std::{
 
 use gitlab::api::Query;
 use glob::glob;
-use strum::IntoEnumIterator;
 use thiserror::Error;
 use url::Url;
 
-use crate::{FileSource, Forge::GitLab, language::Language, storage};
+use crate::{language::Language, storage};
 
 static REPOS_ROOT: LazyLock<PathBuf> = LazyLock::new(|| storage::CACHE_DIR.join("repos"));
 
