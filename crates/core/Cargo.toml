@@ -51,29 +51,17 @@ clap = { version = "4", optional = true, default-features = false, features = [
     "std",
     "derive",
 ] }
-
 rhai = { version = "1", optional = true }
 starlark = { version = "0.14", optional = true }
 mlua = { version = "0.11", features = ["vendored", "luau"], optional = true }
-forgejo-api = { version = "0.11", optional = true }
-octocrab = { version = "0.53", optional = true }
-gitlab = { version = "0.1901", optional = true }
-reqwest = { version = "0.13", features = [
-    "blocking",
-    "stream",
-], optional = true }
+reqwest = { version = "0.13", features = ["blocking", "stream"] }
 
 [features]
-full = ["scripting", "forge"]
+full = ["scripting"]
 scripting = ["rhai", "lua", "starlark"]
-forge = ["github", "gitlab", "forgejo", "custom-forge"]
 
 value-enums = ["dep:clap"]
 git = ["dep:gix"]
 rhai = ["dep:rhai"]
 lua = ["dep:mlua"]
 starlark = ["dep:starlark"]
-github = ["dep:octocrab"]
-gitlab = ["dep:gitlab"]
-forgejo = ["dep:forgejo-api"]
-custom-forge = ["dep:reqwest", "git"]

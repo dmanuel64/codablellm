@@ -2,13 +2,13 @@ use directories::ProjectDirs;
 use flate2::read::GzDecoder;
 use fs_extra::{dir, file};
 use indicatif::ProgressBar;
-use reqwest::blocking::{Client, ClientBuilder, RequestBuilder};
+use reqwest::blocking::Client;
 use std::{
     fs::File,
     io,
     path::{Path, PathBuf},
     str::FromStr,
-    sync::{LazyLock, OnceLock},
+    sync::LazyLock,
 };
 use tar::Archive;
 use thiserror::Error;
@@ -120,7 +120,7 @@ impl RemoteFile {
 #[derive(Debug, Clone)]
 pub enum FileSource {
     Local(PathBuf),
-    Url(RemoteFile),
+    Remote(RemoteFile),
 }
 
 impl FromStr for FileSource {
@@ -128,7 +128,7 @@ impl FromStr for FileSource {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Ok(url) = Url::parse(s) {
-            Ok(FileSource::Url(RemoteFile::new(url)))
+            Ok(FileSource::Remote(RemoteFile::new(url)))
         } else if s.contains("://") {
             Err(Error::AmbiguousSource)
         } else {
@@ -143,7 +143,7 @@ impl TryFrom<FileSource> for PathBuf {
     fn try_from(value: FileSource) -> Result<Self, Self::Error> {
         match value {
             FileSource::Local(path) => Ok(path),
-            FileSource::Url(url) => todo!(),
+            FileSource::Remote(url) => todo!(),
         }
     }
 }
