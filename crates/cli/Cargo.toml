@@ -28,3 +28,4 @@ toml.workspace = true
 clap = { version = "4", features = ["derive"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
+figment = { version = "0.10", features = ["toml", "env"] }

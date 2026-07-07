@@ -1,8 +1,11 @@
+use crate::storage;
 use clap::{Args, Subcommand, ValueEnum};
 use codablellm::Language;
 use color_eyre::eyre::Result;
-
-use crate::storage;
+use figment::{
+    Figment,
+    providers::{Env, Format, Serialized, Toml},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
@@ -13,6 +16,116 @@ use std::{
 use strum::IntoEnumIterator;
 
 pub static PATH: LazyLock<PathBuf> = LazyLock::new(|| storage::CONFIG_DIR.join("config.toml"));
+
+fn build_figment() -> Figment {
+    Figment::from(Serialized::defaults(Config::default()))
+        .merge(Toml::file(&*PATH).nested())
+        .merge(Env::prefixed("CODABLELLM_").global())
+}
+
+struct State {
+    figment: Figment,
+    config: Config,
+}
+
+use figment::{
+    Figment, Profile,
+    providers::{Env, Format, Serialized, Toml},
+};
+use std::path::PathBuf;
+use std::sync::{LazyLock, RwLock};
+
+pub static PATH: LazyLock<PathBuf> = LazyLock::new(|| storage::CONFIG_DIR.join("config.toml"));
+
+/// Builds defaults -> file -> env, with `.nested()` so each top-level
+/// TOML table (`[dev]`, `[prod]`, etc.) is treated as its own profile.
+fn build_figment() -> Figment {
+    Figment::from(Serialized::defaults(Config::default()))
+        .merge(Toml::file(&*PATH).nested())
+        .merge(Env::prefixed("CODABLELLM_").global())
+}
+
+struct State {
+    figment: Figment,
+    config: Config,
+}
+
+impl State {
+    fn load() -> Self {
+        let figment = build_figment();
+
+        // Which profile to select: reserved top-level "profile" key in the
+        // file (falls back to Figment's Default profile).
+        let profile = figment
+            .extract_inner::<String>("profile")
+            .map(Profile::new)
+            .unwrap_or_else(|_| Profile::Default);
+
+        let figment = figment.select(profile);
+
+        let config = figment
+            .extract()
+            .inspect_err(|error| {
+                tracing::error!(
+                    %error,
+                    "Failed to load CodableLLM config - using default configuration options"
+                );
+            })
+            .unwrap_or_default();
+
+        Self { figment, config }
+    }
+
+    fn save(&self) -> Result<()> {
+        if let Some(parent) = PATH.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        // Read the existing file so other profiles aren't clobbered.
+        let mut doc: toml::Table = std::fs::read_to_string(PATH)
+            .ok()
+            .and_then(|s| toml::from_str(&s).ok())
+            .unwrap_or_default();
+
+        doc.insert(
+            self.figment.profile().to_string(),
+            toml::Value::try_from(&self.config)?,
+        );
+        doc.insert(
+            "profile".into(),
+            toml::Value::String(self.figment.profile().to_string()),
+        );
+
+        std::fs::write(&*PATH, toml::to_string_pretty(&doc)?)?;
+        Ok(())
+    }
+}
+
+static STATE: LazyLock<RwLock<State>> = LazyLock::new(|| RwLock::new(State::load()));
+
+pub fn get() -> Config {
+    STATE.read().unwrap().config.clone()
+}
+
+pub fn current_profile() -> Profile {
+    STATE.read().unwrap().figment.profile().clone()
+}
+
+pub fn set_profile(profile: impl Into<Profile>) -> Result<()> {
+    let mut state = STATE.write().unwrap();
+    state.figment = state.figment.clone().select(profile.into());
+    state.config = state.figment.extract()?;
+    state.save()
+}
+
+pub fn update<F>(f: F) -> Result<()>
+where
+    F: FnOnce(&mut Config),
+{
+    let mut state = STATE.write().unwrap();
+    f(&mut state.config);
+    state.save()
+}
 
 static CONFIG: LazyLock<RwLock<Config>> = LazyLock::new(|| {
     RwLock::new(
@@ -26,19 +139,6 @@ static CONFIG: LazyLock<RwLock<Config>> = LazyLock::new(|| {
             .unwrap_or_default(),
     )
 });
-
-pub fn get() -> Config {
-    CONFIG.read().unwrap().clone()
-}
-
-pub fn update<F>(f: F) -> Result<()>
-where
-    F: FnOnce(&mut Config),
-{
-    let mut guard = CONFIG.write().unwrap();
-    f(&mut guard);
-    guard.save()
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case", default)]

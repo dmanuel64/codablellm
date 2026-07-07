@@ -5,7 +5,11 @@ use strum::{Display, EnumCount, EnumIter, IntoEnumIterator};
 use thiserror::Error;
 use tracing::instrument;
 
-use crate::{FileSource, builder, dataset, decompiler, extractor, language, mapper, repo, storage};
+use crate::{
+    FileSource, builder,
+    dataset::{self, Dataset},
+    decompiler, extractor, language, mapper, repo, storage,
+};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -17,31 +21,18 @@ pub enum Error {
     Builder(#[from] builder::Error),
     #[error(transparent)]
     Storage(#[from] storage::Error),
-    #[error("cannot transition from stage \"{stage}\" via event \"{event}\"")]
-    InvalidTransition { stage: Stage, event: Event },
 }
 
 struct Manager {
     source: FileSource,
     mode: Mode,
-    stage: Stage,
     progress: ProgressBar,
 }
 
 impl Manager {
     pub fn new(source: FileSource, mode: Mode, display_progress: bool) -> Self {
         let progress = if display_progress {
-            ProgressBar::new(if let Mode::SourceOnly = mode {
-                Stage::COUNT as u64
-                    - Stage::iter().fold(
-                        0,
-                        |acc, s| {
-                            if s.is_binary_stage() { acc + 1 } else { acc }
-                        },
-                    )
-            } else {
-                Stage::COUNT as u64
-            })
+            ProgressBar::no_length()
         } else {
             ProgressBar::hidden()
         };
@@ -49,84 +40,45 @@ impl Manager {
         Self {
             source,
             mode,
-            stage: Stage::default(),
             progress,
         }
     }
 
-    fn step(&self) -> Result<Event, Error> {
-        match self.stage {
-            Stage::Pulling => {
-                self.progress.set_message("Pulling repo...");
-                // repo::pull(&self.repo_url)?;
-                Ok(Event::RepoPulled)
-            }
-            Stage::ExtractSourceCode => {
-                self.progress.set_message("Extracting source code...");
-                Ok(Event::SourceCodeExtracted)
-            }
-            Stage::SetupBuilder => {
-                self.progress.set_message("Setting up builder...");
-                Ok(Event::BuilderSetup)
-            }
-            Stage::BuildCode => {
-                self.progress.set_message("Building repository...");
-                Ok(Event::CodeBuilt)
-            }
-            Stage::DecompileBinaries => {
-                self.progress.set_message("Decompiling binaries...");
-                Ok(Event::BinariesDecompiled)
-            }
-            Stage::MapCode => {
-                self.progress
-                    .set_message("Mapping decompiled/source code...");
-                Ok(Event::CodeMapped)
-            }
-            Stage::CreateDataset => {
-                self.progress.set_message("Creating dataset...");
-                Ok(Event::DatasetCreated)
-            }
-            Stage::Complete => todo!(),
-        }
-    }
-
     /// Some docstring
-    pub fn run(&mut self) -> Result<PathBuf, Error> {
+    pub fn run(&self) -> Result<dataset::Kind, Error> {
         tracing::info!("Starting pipeline");
-        loop {
-            if let Stage::Complete = self.stage {
-                break;
-            }
-            let event = self.step()?;
-            tracing::debug!(
-                %event,
-                "Pipeline event received"
-            );
-            let prev_stage = self.stage;
-            if let Event::SourceCodeExtracted = event
-                && let Mode::SourceOnly = self.mode
-            {
-                // Skip to create dataset stage
-                tracing::debug!(
-                    "Current pipeline mode is source code only - skipping to dataset creation stage"
-                );
-                self.stage = Stage::CreateDataset
-            } else {
-                self.stage.transition(event)?;
-            }
-            self.progress.inc(1);
+        let stages = if matches!(self.mode, Mode::SourceOnly) {
+            Box::new(Stage::iter_source_stages()) as Box<dyn Iterator<Item = Stage>>
+        } else {
+            Box::new(Stage::iter())
+        };
+        for stage in self.progress.wrap_iter(stages) {
             tracing::info!(
-                %prev_stage,
-                current_stage = %self.stage,
-                "Pipeline transitioned"
+                %stage,
+                "Executing pipeline stage"
             );
+            self.process(&stage)?;
         }
         todo!("path to dataset")
     }
+
+    fn process(&self, stage: &Stage) -> Result<(), Error> {
+        match stage {
+            Stage::Pulling => todo!(),
+            Stage::ExtractSourceCode => todo!(),
+            Stage::SetupBuilder => todo!(),
+            Stage::BuildCode => todo!(),
+            Stage::DecompileBinaries => todo!(),
+            Stage::MapCode => todo!(),
+            Stage::CreateDataset => todo!(),
+        }
+        Ok(())
+    }
 }
 
-#[derive(Debug, Copy, Clone, Display, EnumCount, EnumIter)]
+#[derive(Debug, Copy, Clone, Display, Default, EnumCount, EnumIter)]
 pub enum Stage {
+    #[default]
     Pulling,
     ExtractSourceCode,
     SetupBuilder,
@@ -134,57 +86,19 @@ pub enum Stage {
     DecompileBinaries,
     MapCode,
     CreateDataset,
-    Complete,
 }
 
 impl Stage {
-    pub fn start() -> Stage {
-        Self::Pulling
-    }
-
     pub fn is_binary_stage(&self) -> bool {
-        match self {
-            Self::Pulling | Self::ExtractSourceCode | Self::CreateDataset | Self::Complete => false,
-            Self::SetupBuilder | Self::BuildCode | Self::DecompileBinaries | Self::MapCode => true,
-        }
+        matches!(
+            self,
+            Self::SetupBuilder | Self::BuildCode | Self::DecompileBinaries | Self::MapCode
+        )
     }
 
-    pub fn transition(&mut self, event: Event) -> Result<(), Error> {
-        let next = match (&*self, event) {
-            (Self::Pulling, Event::RepoPulled) => Self::SetupBuilder,
-            (Self::SetupBuilder, Event::BuilderSetup) => Self::ExtractSourceCode,
-            (Self::ExtractSourceCode, Event::SourceCodeExtracted) => Self::BuildCode,
-            (Self::BuildCode, Event::CodeBuilt) => Self::DecompileBinaries,
-            (Self::DecompileBinaries, Event::BinariesDecompiled) => Self::MapCode,
-            (Self::MapCode, Event::CodeMapped) => Self::CreateDataset,
-            (Self::CreateDataset, Event::DatasetCreated) => Self::Complete,
-            (stage, event) => {
-                return Err(Error::InvalidTransition {
-                    stage: *stage,
-                    event,
-                });
-            }
-        };
-        *self = next;
-        Ok(())
+    pub fn iter_source_stages() -> impl Iterator<Item = Stage> {
+        Self::iter().filter(|s| !s.is_binary_stage())
     }
-}
-
-impl Default for Stage {
-    fn default() -> Self {
-        Self::start()
-    }
-}
-
-#[derive(Debug, Display)]
-pub enum Event {
-    RepoPulled,
-    BuilderSetup,
-    SourceCodeExtracted,
-    CodeBuilt,
-    BinariesDecompiled,
-    CodeMapped,
-    DatasetCreated,
 }
 
 #[derive(Debug, Clone)]
@@ -222,7 +136,7 @@ impl Default for Options<'_> {
     }
 }
 
-pub fn run(source: FileSource, mode: Mode) -> Result<PathBuf, Error> {
+pub fn run(source: FileSource, mode: Mode) -> Result<dataset::Kind, Error> {
     run_with_options(source, mode, &Options::default())
 }
 
@@ -231,7 +145,7 @@ pub fn run_with_options(
     source: FileSource,
     mode: Mode,
     options: &Options,
-) -> Result<PathBuf, Error> {
+) -> Result<dataset::Kind, Error> {
     tracing::trace!(?options);
     Manager::new(source, mode, options.display_progress).run()
 }

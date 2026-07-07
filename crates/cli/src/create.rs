@@ -58,9 +58,11 @@ pub fn run(command: Command) -> Result<()> {
 }
 
 fn create_source_dataset(repo: FileSource, name: Option<String>) -> Result<PathBuf> {
-    codablellm::run(repo, codablellm::Mode::SourceOnly).map_err(Report::from)
+    let dataset = codablellm::run(repo, codablellm::Mode::SourceOnly)?;
+    todo!()
 }
 
 fn create_binary_dataset(repo: FileSource, name: Option<String>) -> Result<PathBuf> {
-    codablellm::run(repo, codablellm::Mode::SourceOnly).map_err(Report::from)
+    let dataset = codablellm::run(repo, codablellm::Mode::SourceOnly)?;
+    todo!()
 }

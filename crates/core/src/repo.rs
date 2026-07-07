@@ -110,6 +110,12 @@ pub fn fetch(source: Source) -> Result<Repository, Error> {
     fetch_with_options(source, Options::default())
 }
 
-pub fn fetch_with_options(source: Source, options: Options) -> Result<Repository, Error> {
+pub fn fetch_with_options(
+    source: Source,
+    Options {
+        display_progress,
+        request_builder,
+    }: Options,
+) -> Result<Repository, Error> {
     todo!()
 }

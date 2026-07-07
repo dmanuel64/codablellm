@@ -6,7 +6,7 @@ use std::{
 use polars::prelude::*;
 use thiserror::Error;
 
-use crate::{function::Function, storage};
+use crate::{FileSource, function::Function, storage};
 
 pub static DATASETS_DIR: LazyLock<PathBuf> = LazyLock::new(|| storage::DATA_DIR.join("datasets"));
 
@@ -29,6 +29,27 @@ pub struct Options<'a> {
 pub trait Dataset {
     fn df(&self) -> &DataFrame;
     fn df_mut(&mut self) -> &mut DataFrame;
+}
+
+pub enum Kind {
+    Source(SourceDataset),
+    Binary(BinaryDataset),
+}
+
+impl Dataset for Kind {
+    fn df(&self) -> &DataFrame {
+        match self {
+            Self::Source(d) => d.df(),
+            Self::Binary(d) => d.df(),
+        }
+    }
+
+    fn df_mut(&mut self) -> &mut DataFrame {
+        match self {
+            Self::Source(d) => d.df_mut(),
+            Self::Binary(d) => d.df_mut(),
+        }
+    }
 }
 
 pub struct SourceDataset {

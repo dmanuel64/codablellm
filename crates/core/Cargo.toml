@@ -53,15 +53,17 @@ clap = { version = "4", optional = true, default-features = false, features = [
 ] }
 rhai = { version = "1", optional = true }
 starlark = { version = "0.14", optional = true }
-mlua = { version = "0.11", features = ["vendored", "luau"], optional = true }
+mlua = { version = "0.12", features = ["vendored", "luau"], optional = true }
 reqwest = { version = "0.13", features = ["blocking", "stream"] }
 
 [features]
-full = ["scripting"]
+full = ["scripting", "git"]
 scripting = ["rhai", "lua", "starlark"]
 
 value-enums = ["dep:clap"]
+
 git = ["dep:gix"]
+
 rhai = ["dep:rhai"]
 lua = ["dep:mlua"]
 starlark = ["dep:starlark"]
