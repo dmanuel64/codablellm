@@ -11,6 +11,7 @@ pub mod pipeline;
 pub mod repo;
 pub mod storage;
 
+pub use dataset::{BinaryDataset, Kind as DatasetKind, SourceDataset};
 pub use language::Language;
 pub use pipeline::Error as CodablellmError;
 pub use pipeline::{Mode, Options, run, run_with_options};

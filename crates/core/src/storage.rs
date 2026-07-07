@@ -4,6 +4,7 @@ use fs_extra::{dir, file};
 use indicatif::ProgressBar;
 use reqwest::blocking::Client;
 use std::{
+    fmt::Display,
     fs::File,
     io,
     path::{Path, PathBuf},
@@ -21,8 +22,11 @@ static DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
 pub static DATA_DIR: LazyLock<&Path> = LazyLock::new(|| DIRS.data_local_dir());
 pub static CONFIG_DIR: LazyLock<&Path> = LazyLock::new(|| DIRS.config_local_dir());
 pub static CACHE_DIR: LazyLock<&Path> = LazyLock::new(|| DIRS.cache_dir());
-pub static STATE_DIR: LazyLock<&Path> =
-    LazyLock::new(|| DIRS.state_dir().unwrap_or_else(|| &*CACHE_DIR));
+pub static STATE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    DIRS.state_dir()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| DATA_DIR.join("state"))
+});
 
 static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| Client::new());
 
@@ -117,6 +121,12 @@ impl RemoteFile {
     }
 }
 
+impl Display for RemoteFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.url.to_string())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum FileSource {
     Local(PathBuf),
@@ -137,14 +147,16 @@ impl FromStr for FileSource {
     }
 }
 
-impl TryFrom<FileSource> for PathBuf {
-    type Error = Error;
-
-    fn try_from(value: FileSource) -> Result<Self, Self::Error> {
-        match value {
-            FileSource::Local(path) => Ok(path),
-            FileSource::Remote(url) => todo!(),
-        }
+impl Display for FileSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                FileSource::Local(path_buf) => path_buf.display().to_string(),
+                FileSource::Remote(remote_file) => remote_file.to_string(),
+            }
+        )
     }
 }
 

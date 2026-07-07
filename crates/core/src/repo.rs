@@ -87,7 +87,7 @@ pub struct Metadata {
 }
 
 impl Metadata {
-    pub fn from_github_url(url: &Url) -> Option<Self> {
+    pub fn from_github(url: &Url) -> Option<Self> {
         let segs: Vec<&str> = url.path_segments()?.filter(|s| !s.is_empty()).collect();
         let owner = segs.first()?.to_string();
         let name = strip_git_suffix(segs.get(1)?).to_string();
@@ -143,7 +143,7 @@ impl Metadata {
         }
     }
 
-    pub fn from_gitea_url(url: &Url) -> Option<Self> {
+    pub fn from_gitea(url: &Url) -> Option<Self> {
         let segs: Vec<&str> = url.path_segments()?.filter(|s| !s.is_empty()).collect();
         let owner = segs.first()?.to_string();
         let name = strip_git_suffix(segs.get(1)?).to_string();

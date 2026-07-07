@@ -17,119 +17,9 @@ use strum::IntoEnumIterator;
 
 pub static PATH: LazyLock<PathBuf> = LazyLock::new(|| storage::CONFIG_DIR.join("config.toml"));
 
-fn build_figment() -> Figment {
-    Figment::from(Serialized::defaults(Config::default()))
-        .merge(Toml::file(&*PATH).nested())
-        .merge(Env::prefixed("CODABLELLM_").global())
-}
-
-struct State {
-    figment: Figment,
-    config: Config,
-}
-
-use figment::{
-    Figment, Profile,
-    providers::{Env, Format, Serialized, Toml},
-};
-use std::path::PathBuf;
-use std::sync::{LazyLock, RwLock};
-
-pub static PATH: LazyLock<PathBuf> = LazyLock::new(|| storage::CONFIG_DIR.join("config.toml"));
-
-/// Builds defaults -> file -> env, with `.nested()` so each top-level
-/// TOML table (`[dev]`, `[prod]`, etc.) is treated as its own profile.
-fn build_figment() -> Figment {
-    Figment::from(Serialized::defaults(Config::default()))
-        .merge(Toml::file(&*PATH).nested())
-        .merge(Env::prefixed("CODABLELLM_").global())
-}
-
-struct State {
-    figment: Figment,
-    config: Config,
-}
-
-impl State {
-    fn load() -> Self {
-        let figment = build_figment();
-
-        // Which profile to select: reserved top-level "profile" key in the
-        // file (falls back to Figment's Default profile).
-        let profile = figment
-            .extract_inner::<String>("profile")
-            .map(Profile::new)
-            .unwrap_or_else(|_| Profile::Default);
-
-        let figment = figment.select(profile);
-
-        let config = figment
-            .extract()
-            .inspect_err(|error| {
-                tracing::error!(
-                    %error,
-                    "Failed to load CodableLLM config - using default configuration options"
-                );
-            })
-            .unwrap_or_default();
-
-        Self { figment, config }
-    }
-
-    fn save(&self) -> Result<()> {
-        if let Some(parent) = PATH.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-
-        // Read the existing file so other profiles aren't clobbered.
-        let mut doc: toml::Table = std::fs::read_to_string(PATH)
-            .ok()
-            .and_then(|s| toml::from_str(&s).ok())
-            .unwrap_or_default();
-
-        doc.insert(
-            self.figment.profile().to_string(),
-            toml::Value::try_from(&self.config)?,
-        );
-        doc.insert(
-            "profile".into(),
-            toml::Value::String(self.figment.profile().to_string()),
-        );
-
-        std::fs::write(&*PATH, toml::to_string_pretty(&doc)?)?;
-        Ok(())
-    }
-}
-
-static STATE: LazyLock<RwLock<State>> = LazyLock::new(|| RwLock::new(State::load()));
-
-pub fn get() -> Config {
-    STATE.read().unwrap().config.clone()
-}
-
-pub fn current_profile() -> Profile {
-    STATE.read().unwrap().figment.profile().clone()
-}
-
-pub fn set_profile(profile: impl Into<Profile>) -> Result<()> {
-    let mut state = STATE.write().unwrap();
-    state.figment = state.figment.clone().select(profile.into());
-    state.config = state.figment.extract()?;
-    state.save()
-}
-
-pub fn update<F>(f: F) -> Result<()>
-where
-    F: FnOnce(&mut Config),
-{
-    let mut state = STATE.write().unwrap();
-    f(&mut state.config);
-    state.save()
-}
-
 static CONFIG: LazyLock<RwLock<Config>> = LazyLock::new(|| {
     RwLock::new(
-        Config::load()
+        load()
             .inspect_err(|error| {
                 tracing::error!(
                     %error,
@@ -140,28 +30,48 @@ static CONFIG: LazyLock<RwLock<Config>> = LazyLock::new(|| {
     )
 });
 
+fn load() -> Result<Config> {
+    let config: Config = Figment::from(Serialized::defaults(Config::default()))
+        .merge(Toml::file(&*PATH))
+        .merge(Env::prefixed("CODABLELLM_").split("_"))
+        .extract()?;
+    Ok(config)
+}
+
+pub fn get() -> Config {
+    CONFIG.read().unwrap().clone()
+}
+
+pub fn update<F>(f: F) -> Result<()>
+where
+    F: FnOnce(&mut Config),
+{
+    let mut guard = CONFIG.write().unwrap();
+    f(&mut guard);
+    if let Some(parent) = PATH.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let contents = toml::to_string_pretty(&*guard)?;
+    fs::write(&*PATH, contents)?;
+    Ok(())
+}
+
+pub fn generate() -> Result<()> {
+    update(|_| {})
+}
+
+pub fn reset() -> Result<()> {
+    if PATH.exists() {
+        fs::remove_file(&*PATH)?;
+    }
+    generate()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case", default)]
 pub struct Config {
     pub display: DisplayConfig,
-    pub forge: ForgeConfig,
     pub languages: LanguagesConfig,
-}
-
-impl Config {
-    fn load() -> Result<Self> {
-        if !PATH.exists() {
-            return Ok(Self::default());
-        }
-        let config = toml::from_str(&fs::read_to_string(&*PATH)?)?;
-        Ok(config)
-    }
-
-    fn save(&self) -> Result<()> {
-        let contents = toml::to_string_pretty(self)?;
-        fs::write(&*PATH, contents)?;
-        Ok(())
-    }
 }
 
 impl Display for Config {
@@ -180,6 +90,7 @@ pub struct DisplayConfig {
     pub progress: bool,
     pub console_log_level: LogLevel,
     pub file_log_level: LogLevel,
+    pub interactive: bool,
 }
 
 impl Default for DisplayConfig {
@@ -188,6 +99,7 @@ impl Default for DisplayConfig {
             progress: true,
             console_log_level: LogLevel::Off,
             file_log_level: LogLevel::Info,
+            interactive: true,
         }
     }
 }
@@ -203,17 +115,20 @@ pub enum LogLevel {
     Error,
 }
 
-impl ToString for LogLevel {
-    fn to_string(&self) -> String {
-        match self {
-            LogLevel::Off => "off",
-            LogLevel::Trace => "trace",
-            LogLevel::Debug => "debug",
-            LogLevel::Info => "info",
-            LogLevel::Warn => "warn",
-            LogLevel::Error => "error",
-        }
-        .to_string()
+impl Display for LogLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                LogLevel::Off => "off",
+                LogLevel::Trace => "trace",
+                LogLevel::Debug => "debug",
+                LogLevel::Info => "info",
+                LogLevel::Warn => "warn",
+                LogLevel::Error => "error",
+            }
+        )
     }
 }
 
@@ -243,13 +158,6 @@ impl From<u8> for LogLevel {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "kebab-case", default)]
-pub struct ForgeConfig {
-    pub github_token: Option<String>,
-    pub gitlab_token: Option<String>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", default)]
 pub struct LanguagesConfig {
@@ -268,7 +176,7 @@ impl Default for LanguagesConfig {
 
 #[derive(Debug, Args)]
 #[command(args_conflicts_with_subcommands = true)]
-pub struct Command {
+pub struct ConfigArgs {
     #[clap(subcommand)]
     command: Option<Commands>,
     #[arg(long)]
@@ -325,7 +233,7 @@ enum Commands {
     },
 }
 
-pub fn run(command: Command) -> Result<()> {
+pub fn run(command: ConfigArgs) -> Result<()> {
     if command.show_all {
         println!("{}", get());
         return Ok(());
