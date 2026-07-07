@@ -1,6 +1,7 @@
 use glob::glob;
 use std::{path::PathBuf, sync::LazyLock};
 use thiserror::Error;
+use url::Url;
 
 use crate::{FileSource, language::Language, storage};
 
@@ -24,7 +25,7 @@ impl Repository {
         let mut paths = Vec::new();
         for ext in self.languages.iter().flat_map(Language::file_extensions) {
             let pattern = format!("{}/**/*.{}", self.path.display(), ext);
-            paths.extend(glob(&pattern).unwrap().flatten());
+            paths.extend(glob(&pattern).expect("glob pattern to be valid").flatten());
         }
         paths
     }
@@ -47,47 +48,125 @@ impl Source {
             "{}-{}-{}",
             self.metadata.owner,
             self.metadata.name,
-            self.metadata.git_ref.to_string()
+            self.metadata
+                .git_ref
+                .as_ref()
+                .map(String::as_str)
+                .unwrap_or("unknown")
         )
         .replace(".", "-");
         REPOS_ROOT.join(slug_dirname).join(repo_dirname)
     }
 }
 
+fn strip_git_suffix(s: &str) -> &str {
+    s.strip_suffix(".git").unwrap_or(s)
+}
+
+fn strip_archive_ext(s: &str) -> &str {
+    [".tar.gz", ".tgz", ".tar.bz2", ".tar", ".zip"]
+        .iter()
+        .find_map(|ext| s.strip_suffix(ext))
+        .unwrap_or(s)
+}
+
+/// Last segment is the repo; everything before it is the owner path
+/// (handles GitLab groups/subgroups). Requires at least owner + repo.
+fn split_owner_repo(path: &[&str]) -> Option<(String, String)> {
+    let (repo, owner) = path.split_last()?;
+    if owner.is_empty() {
+        return None;
+    }
+    Some((owner.join("/"), strip_git_suffix(repo).to_string()))
+}
+
 pub struct Metadata {
     pub owner: String,
     pub name: String,
-    pub git_ref: GitRef,
+    pub git_ref: Option<String>,
 }
 
-// TODO: evaluate whether this should stay as an enum or new-type struct
-pub enum GitRef {
-    Branch(String),
-    Tag(String),
-    Commit(String),
-}
+impl Metadata {
+    pub fn from_github_url(url: &Url) -> Option<Self> {
+        let segs: Vec<&str> = url.path_segments()?.filter(|s| !s.is_empty()).collect();
+        let owner = segs.first()?.to_string();
+        let name = strip_git_suffix(segs.get(1)?).to_string();
 
-impl ToString for GitRef {
-    fn to_string(&self) -> String {
-        match self {
-            GitRef::Branch(c) | GitRef::Commit(c) | GitRef::Tag(c) => c.clone(),
+        let git_ref = match &segs[2..] {
+            [] => None,
+            ["archive", "refs", "heads", tail @ ..] | ["archive", "refs", "tags", tail @ ..]
+                if !tail.is_empty() =>
+            {
+                Some(strip_archive_ext(&tail.join("/")).to_string())
+            }
+            ["archive", tail @ ..] if !tail.is_empty() => {
+                Some(strip_archive_ext(&tail.join("/")).to_string())
+            }
+            ["tree", tail @ ..] | ["blob", tail @ ..] if !tail.is_empty() => Some(tail.join("/")),
+            _ => None,
+        };
+
+        Some(Metadata {
+            owner,
+            name,
+            git_ref,
+        })
+    }
+
+    pub fn from_gitlab(url: &Url) -> Option<Self> {
+        let segs: Vec<&str> = url.path_segments()?.filter(|s| !s.is_empty()).collect();
+
+        match segs.iter().position(|&s| s == "-") {
+            Some(dash) => {
+                let (owner, name) = split_owner_repo(&segs[..dash])?;
+                let git_ref = match &segs[dash + 1..] {
+                    // /-/archive/<ref...>/<filename>
+                    ["archive", middle @ .., _file] if !middle.is_empty() => Some(middle.join("/")),
+                    ["tree", tail @ ..] if !tail.is_empty() => Some(tail.join("/")),
+                    _ => None,
+                };
+                Some(Metadata {
+                    owner,
+                    name,
+                    git_ref,
+                })
+            }
+            // plain clone / .git URL: whole path is the project, no ref
+            None => {
+                let (owner, name) = split_owner_repo(&segs)?;
+                Some(Metadata {
+                    owner,
+                    name,
+                    git_ref: None,
+                })
+            }
         }
     }
-}
 
-impl GitRef {
-    pub fn main_branch() -> Self {
-        Self::Branch("main".to_string())
-    }
+    pub fn from_gitea_url(url: &Url) -> Option<Self> {
+        let segs: Vec<&str> = url.path_segments()?.filter(|s| !s.is_empty()).collect();
+        let owner = segs.first()?.to_string();
+        let name = strip_git_suffix(segs.get(1)?).to_string();
 
-    pub fn master_branch() -> Self {
-        Self::Branch("master".to_string())
-    }
-}
+        let git_ref = match &segs[2..] {
+            ["archive", tail @ ..] if !tail.is_empty() => {
+                Some(strip_archive_ext(&tail.join("/")).to_string())
+            }
+            ["src", "branch", tail @ ..]
+            | ["src", "tag", tail @ ..]
+            | ["src", "commit", tail @ ..]
+                if !tail.is_empty() =>
+            {
+                Some(tail.join("/"))
+            }
+            _ => None,
+        };
 
-impl Default for GitRef {
-    fn default() -> Self {
-        Self::main_branch()
+        Some(Metadata {
+            owner,
+            name,
+            git_ref,
+        })
     }
 }
 
