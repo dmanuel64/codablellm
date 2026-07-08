@@ -117,14 +117,12 @@ pub enum ScriptEngine {
 
 #[derive(Debug, Clone, Default)]
 pub struct ScriptOptions<'a> {
-    pub hook: ScriptHook,
     pub engine: ScriptEngine,
     pub rename: Option<&'a str>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Script {
-    pub hook: ScriptHook,
     engine: ScriptEngine,
 }
 
@@ -138,7 +136,6 @@ impl Script {
         let dest = SCRIPTS_DIR.join(name);
         storage::copy_data("script", path, &dest, false)?;
         Ok(Self {
-            hook: options.hook,
             engine: options.engine,
         })
     }

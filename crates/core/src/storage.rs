@@ -137,12 +137,20 @@ impl FromStr for FileSource {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Ok(url) = Url::parse(s) {
-            Ok(FileSource::Remote(RemoteFile::new(url)))
-        } else if s.contains("://") {
-            Err(Error::AmbiguousSource)
-        } else {
-            Ok(FileSource::Local(PathBuf::from(s)))
+        match Url::parse(s) {
+            Ok(url) if matches!(url.scheme(), "http" | "https") => {
+                Ok(FileSource::Remote(RemoteFile::new(url)))
+            }
+            // single letter scheme = Windows drive path (C:\...)
+            Ok(url) if url.scheme().len() == 1 => Ok(FileSource::Local(PathBuf::from(s))),
+            // file:// → honor it as local
+            Ok(url) if url.scheme() == "file" => url
+                .to_file_path()
+                .map(FileSource::Local)
+                .map_err(|_| Error::AmbiguousSource),
+            // some other scheme we don't handle (ssh://, git://...) → explicit error
+            Ok(_) => Err(Error::AmbiguousSource), // or a clearer UnsupportedScheme
+            Err(_) => Ok(FileSource::Local(PathBuf::from(s))),
         }
     }
 }

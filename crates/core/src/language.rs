@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
 #[derive(Debug, Default)]
@@ -10,22 +11,25 @@ pub struct Options {
 
 #[derive(Debug, Clone, Display, EnumIter)]
 #[strum(serialize_all = "lowercase", ascii_case_insensitive)]
-#[cfg_attr(feature = "value-enums", derive(clap::ValueEnum))]
+#[cfg_attr(
+    feature = "value-enums",
+    derive(clap::ValueEnum, Serialize, Deserialize),
+    serde(rename_all = "lowercase"),
+    clap(rename_all = "lowercase")
+)]
 pub enum Language {
     C,
     #[strum(serialize = "c++")]
-    #[cfg_attr(feature = "value-enums", clap(name = "c++"))]
+    #[cfg_attr(feature = "value-enums", clap(name = "c++"), serde(rename = "c++"))]
     Cpp,
     Python,
-    #[cfg_attr(feature = "value-enums", clap(name = "javascript"))]
     JavaScript,
-    #[cfg_attr(feature = "value-enums", clap(name = "typescript"))]
     TypeScript,
     Go,
     Rust,
     Java,
     #[strum(serialize = "c#")]
-    #[cfg_attr(feature = "value-enums", clap(name = "c#"))]
+    #[cfg_attr(feature = "value-enums", clap(name = "c#"), serde(rename = "c#"))]
     CSharp,
 }
 

@@ -39,7 +39,7 @@ enum Commands {
 
 #[derive(Debug, Subcommand)]
 enum CreateCommands {
-    SourceCodeDataset(CreateDatasetArgs),
+    Dataset(CreateDatasetArgs),
 }
 
 fn install_error_handlers() -> Result<()> {
@@ -76,7 +76,7 @@ fn run() -> Result<()> {
     let no_input = !config::get().display.interactive;
     match args.command {
         Commands::Create(command) => match command {
-            CreateCommands::SourceCodeDataset(args) => {
+            CreateCommands::Dataset(args) => {
                 let dataset = dataset::create_source_dataset(resolver::resolve(args, no_input)?)?;
                 Ok(())
             }

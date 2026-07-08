@@ -162,14 +162,14 @@ impl From<u8> for LogLevel {
 #[serde(rename_all = "kebab-case", default)]
 pub struct LanguagesConfig {
     pub headers_as_cpp: bool,
-    pub include: Vec<String>,
+    pub include: Vec<Language>,
 }
 
 impl Default for LanguagesConfig {
     fn default() -> Self {
         Self {
             headers_as_cpp: false,
-            include: Language::iter().map(|l| l.to_string()).collect(),
+            include: Language::iter().collect(),
         }
     }
 }
