@@ -1,7 +1,12 @@
-use std::{num::NonZeroUsize, path::PathBuf, str::FromStr};
+use std::{
+    num::NonZeroUsize,
+    path::PathBuf,
+    str::FromStr,
+    sync::{LazyLock, OnceLock},
+};
 
 use clap::{Args, ValueEnum};
-use codablellm::{DatasetKind, FileSource, Language, dataset::Script};
+use codablellm::{DatasetKind, FileSource, Language, dataset::Script, repo};
 use color_eyre::eyre::Result;
 use inquire::{required, validator::Validation};
 use strum::Display;
@@ -18,6 +23,28 @@ const BUILDER_OPTS_HEADING: &str = "Builder Options";
 const DECOMPILER_OPTS_HEADING: &str = "Decompiler Options";
 const DATASET_OPTS_HEADING: &str = "Dataset Options";
 
+fn inferred_forge(val: &str) -> &'static Result<Option<ForgeChoice>> {
+    static FORGE_CHOICE: OnceLock<Result<Option<ForgeChoice>>> = OnceLock::new();
+
+    let choice = FORGE_CHOICE.get_or_init(|| {
+        if let FileSource::Remote(f) = FileSource::from_str(val)? {
+            let url = f.url;
+            let choice = if let Some(_) = repo::Metadata::from_gitlab(&url) {
+                ForgeChoice::GitHub
+            } else if let Some(_) = repo::Metadata::from_gitlab(&url) {
+                ForgeChoice::GitLab
+            } else if let Some(_) = repo::Metadata::from_gitea(&url) {
+                ForgeChoice::Gitea
+            } else {
+                ForgeChoice::Other
+            };
+            Ok(Some(choice))
+        } else {
+            Ok(None)
+        }
+    });
+    choice
+}
 #[derive(Debug, Args)]
 pub struct CreateDatasetArgs {
     /// Name of the dataset being created
@@ -26,18 +53,28 @@ pub struct CreateDatasetArgs {
     /// The path or url to the repository
     repo: Option<FileSource>,
 
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long, default_value_t = ForgeChoice::Auto)]
-    forge: ForgeChoice,
+    /// The type of the code forge if REPO is a URL
+    ///
+    /// If this option is not specified, it will be automatically determined from the URL
+    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long)]
+    forge: Option<ForgeChoice>,
 
+    /// An authorization token to access the remote forge
     #[arg(help_heading = NETWORK_OPTS_HEADING, long)]
     token: Option<String>,
 
+    /// Skip TLS authorization for fetching the repository from the remote forge
     #[arg(help_heading = NETWORK_OPTS_HEADING, long)]
     insecure: bool,
 
+    /// Local path to the certificate authority for the remote forge
     #[arg(help_heading = NETWORK_OPTS_HEADING, long, conflicts_with = "insecure")]
     ca_cert: Option<PathBuf>,
 
+    /// Path(s) to the built binaries of the repository
+    ///
+    /// Specifying this option will create a compiled dataset mapping source code to compiled code.
+    /// The paths can be either absolute or relative. --build-commands must be used with this option.
     #[arg(
         help_heading = BUILDER_OPTS_HEADING,
         short,
@@ -49,7 +86,7 @@ pub struct CreateDatasetArgs {
     )]
     binaries: Vec<PathBuf>,
 
-    /// Commands used to build the repository (repeatable)
+    /// Commands used to build the repository
     #[arg(
         help_heading = BUILDER_OPTS_HEADING,
         short = 'c',
@@ -59,7 +96,7 @@ pub struct CreateDatasetArgs {
     )]
     build_commands: Vec<String>,
 
-    /// Decompilers to use (repeatable)
+    /// Decompilers to use
     #[arg(
         help_heading = DECOMPILER_OPTS_HEADING,
         long,
@@ -91,16 +128,16 @@ pub struct CreateDatasetArgs {
     #[arg(short, long, visible_alias = "out")]
     output: Option<PathBuf>,
 
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "ref", visible_aliases = ["rev", "branch", "tag"])]
+    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "ref", visible_aliases = ["rev", "branch", "tag"], required_if_eq("forge", "other"))]
     git_ref: Option<String>,
 
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "owner")]
+    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "owner", required_if_eq("forge", "other"))]
     repo_owner: Option<String>,
 
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "name")]
+    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "name", required_if_eq("forge", "other"))]
     repo_name: Option<String>,
 
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "rm")]
+    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "remove", visible_alias = "rm")]
     remove: bool,
 
     #[arg(help_heading = EXTRACTOR_OPTS_HEADING, long, value_delimiter = ',')]
@@ -115,16 +152,16 @@ pub struct CreateDatasetArgs {
     #[arg(short, long)]
     jobs: Option<NonZeroUsize>,
 
-    #[arg(help_heading = EXTRACTOR_OPTS_HEADING, long)]
+    #[arg(help_heading = EXTRACTOR_OPTS_HEADING, long, requires = "binaries")]
     extractor_jobs: Option<NonZeroUsize>,
 
-    #[arg(help_heading = DECOMPILER_OPTS_HEADING, long)]
+    #[arg(help_heading = DECOMPILER_OPTS_HEADING, long, requires = "binaries")]
     decompiler_jobs: Option<NonZeroUsize>,
 
     #[arg(help_heading = DATASET_OPTS_HEADING, long)]
     scripts: Vec<PathBuf>,
 
-    #[arg(help_heading = DATASET_OPTS_HEADING, long, default_value_t = true)]
+    #[arg(help_heading = DATASET_OPTS_HEADING, long)]
     paired: bool,
 }
 
@@ -159,7 +196,9 @@ impl IntoResolved for CreateDatasetArgs {
             paired,
             remove,
         } = self;
+        let mut prompted = false;
         let name = require_or_prompt(name, "NAME", interactive, || {
+            prompted = true;
             Ok(
                 inquire::Text::new("Enter the name of the dataset to create")
                     .with_validator(required!())
@@ -167,6 +206,7 @@ impl IntoResolved for CreateDatasetArgs {
             )
         })?;
         let repo = require_or_prompt(repo, "REPO", interactive, || {
+            prompted = true;
             Ok(
                 inquire::CustomType::new("Enter the path or URL to the repository")
                     .with_help_message("URLs should be to a repository's git, tarball, or zipfile")
@@ -174,6 +214,18 @@ impl IntoResolved for CreateDatasetArgs {
                     .prompt()?,
             )
         })?;
+        let is_compiled_dataset = !binaries.is_empty()
+            || !build_commands.is_empty()
+            || prompted
+                .then(|| {
+                    inquire::Confirm::new("Is this a compiled code dataset?")
+                        .with_default(false)
+                        .prompt()
+                })
+                .unwrap_or(Ok(false))?;
+        if is_compiled_dataset {
+            // let binaries = require_or_prompt(binaries, "BINARIES", interactive, prompt)
+        }
         Ok(ResolvedCreateDatasetArgs { name, repo })
     }
 }
@@ -182,7 +234,6 @@ impl IntoResolved for CreateDatasetArgs {
 #[strum(serialize_all = "lowercase")]
 #[clap(rename_all = "lowercase")]
 pub enum ForgeChoice {
-    Auto,
     GitHub,
     GitLab,
     Gitea,
