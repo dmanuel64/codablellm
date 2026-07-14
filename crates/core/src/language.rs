@@ -3,12 +3,6 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
-#[derive(Debug, Default)]
-pub struct Options {
-    pub display_progress: bool,
-    pub request_builder: Option<reqwest::blocking::ClientBuilder>,
-}
-
 #[derive(Debug, Clone, Display, EnumIter)]
 #[strum(serialize_all = "lowercase", ascii_case_insensitive)]
 #[cfg_attr(

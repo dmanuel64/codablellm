@@ -46,10 +46,11 @@ impl Manager {
 
     /// Some docstring
     pub fn run(&self) -> Result<dataset::Kind, Error> {
-        tracing::info!("Starting pipeline");
         let stages = if matches!(self.mode, Mode::SourceOnly) {
+            tracing::info!("Starting pipeline for source code dataset");
             Box::new(Stage::iter_source_stages()) as Box<dyn Iterator<Item = Stage>>
         } else {
+            tracing::info!("Starting pipeline for compiled dataset");
             Box::new(Stage::iter())
         };
         for stage in self.progress.wrap_iter(stages) {
@@ -112,22 +113,22 @@ pub enum Mode {
 }
 
 #[derive(Debug)]
-pub struct Options<'a> {
+pub struct Options {
     pub display_progress: bool,
+    pub dry_run: bool,
     pub repo_options: repo::Options,
-    pub language_options: language::Options,
     pub extractor_options: extractor::Options,
     pub decompiler_options: decompiler::Options,
     pub mapper_options: mapper::Options,
-    pub dataset_options: dataset::Options<'a>,
+    pub dataset_options: dataset::Options,
 }
 
-impl Default for Options<'_> {
+impl Default for Options {
     fn default() -> Self {
         Self {
             display_progress: true,
+            dry_run: false,
             repo_options: repo::Options::default(),
-            language_options: language::Options::default(),
             extractor_options: extractor::Options::default(),
             decompiler_options: decompiler::Options::default(),
             mapper_options: mapper::Options::default(),

@@ -1,7 +1,8 @@
 mod args;
 mod config;
-mod dataset;
+mod create;
 mod errors;
+mod repo;
 mod resolver;
 
 use std::io;
@@ -14,7 +15,7 @@ use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 use crate::{
     config::{ConfigArgs, LogLevel},
-    dataset::CreateDatasetArgs,
+    create::CreateDatasetArgs,
 };
 
 #[global_allocator]
@@ -32,14 +33,10 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
+    Create(CreateDatasetArgs),
     #[command(subcommand)]
-    Create(CreateCommands),
+    Repo(repo::Commands),
     Config(ConfigArgs),
-}
-
-#[derive(Debug, Subcommand)]
-enum CreateCommands {
-    Dataset(CreateDatasetArgs),
 }
 
 fn install_error_handlers() -> Result<()> {
@@ -75,13 +72,12 @@ fn run() -> Result<()> {
     let _guard = init_logger(args.verbose);
     let no_input = !config::get().display.interactive;
     match args.command {
-        Commands::Create(command) => match command {
-            CreateCommands::Dataset(args) => {
-                let dataset = dataset::create_source_dataset(resolver::resolve(args, no_input)?)?;
-                Ok(())
-            }
-        },
+        Commands::Create(args) => {
+            let dataset = create::create_dataset(resolver::resolve(args, no_input)?)?;
+            Ok(())
+        }
         Commands::Config(command) => config::run(command),
+        Commands::Repo(commands) => todo!(),
     }
 }
 

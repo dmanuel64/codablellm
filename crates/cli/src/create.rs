@@ -1,14 +1,12 @@
-use std::{
-    num::NonZeroUsize,
-    path::PathBuf,
-    str::FromStr,
-    sync::{LazyLock, OnceLock},
-};
+use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, sync::OnceLock};
 
 use clap::{Args, ValueEnum};
-use codablellm::{DatasetKind, FileSource, Language, dataset::Script, repo};
+use codablellm::{
+    DatasetKind, FileSource, Language, Mode, Options, dataset, decompiler, extractor, language,
+    mapper, repo,
+};
 use color_eyre::eyre::Result;
-use inquire::{required, validator::Validation};
+use inquire::required;
 use strum::Display;
 
 use crate::{
@@ -45,6 +43,7 @@ fn inferred_forge(val: &str) -> &'static Result<Option<ForgeChoice>> {
     });
     choice
 }
+
 #[derive(Debug, Args)]
 pub struct CreateDatasetArgs {
     /// Name of the dataset being created
@@ -163,6 +162,12 @@ pub struct CreateDatasetArgs {
 
     #[arg(help_heading = DATASET_OPTS_HEADING, long)]
     paired: bool,
+
+    #[arg(help_heading = DATASET_OPTS_HEADING, long, default_value_t = FormatChoice::Csv)]
+    format: FormatChoice,
+
+    #[arg(long, hide = true)]
+    dry_run: bool,
 }
 
 impl IntoResolved for CreateDatasetArgs {
@@ -172,8 +177,8 @@ impl IntoResolved for CreateDatasetArgs {
         let Self {
             name,
             repo,
-            binaries,
-            build_commands,
+            mut binaries,
+            mut build_commands,
             decompilers,
             strip,
             forge,
@@ -194,7 +199,9 @@ impl IntoResolved for CreateDatasetArgs {
             decompiler_jobs,
             scripts,
             paired,
+            dry_run,
             remove,
+            format,
         } = self;
         let mut prompted = false;
         let name = require_or_prompt(name, "NAME", interactive, || {
@@ -216,28 +223,93 @@ impl IntoResolved for CreateDatasetArgs {
         })?;
         let is_compiled_dataset = !binaries.is_empty()
             || !build_commands.is_empty()
-            || prompted
-                .then(|| {
-                    inquire::Confirm::new("Is this a compiled code dataset?")
-                        .with_default(false)
-                        .prompt()
-                })
-                .unwrap_or(Ok(false))?;
+            || (interactive
+                && inquire::Confirm::new("Is this a compiled code dataset?")
+                    .with_default(false)
+                    .prompt()?);
         if is_compiled_dataset {
-            // let binaries = require_or_prompt(binaries, "BINARIES", interactive, prompt)
+            binaries = require_or_prompt(
+                if !binaries.is_empty() {
+                    Some(binaries.clone())
+                } else {
+                    None
+                },
+                "--binaries",
+                interactive,
+                || {
+                    let mut bins = Vec::new();
+                    loop {
+                        let path = PathBuf::from(inquire::Text::new("Enter the path of where the compiled binary will be")
+                        .with_validator(required!())
+                        .with_help_message("Paths may be absolute or relative to the working directory where the build command is executed")
+                        .prompt()?);
+                        bins.push(path);
+                        let more_bins =
+                            inquire::Confirm::new("Do you have more paths to enter?").prompt()?;
+                        if !more_bins {
+                            break;
+                        }
+                    }
+                    Ok(bins)
+                },
+            )?;
+            build_commands = require_or_prompt(
+                if !build_commands.is_empty() {
+                    Some(build_commands.clone())
+                } else {
+                    None
+                },
+                "--build-commands",
+                interactive,
+                || {
+                    let mut cmds = Vec::new();
+                    loop {
+                        let cmd = inquire::Text::new("Enter a build command")
+                            .with_validator(required!())
+                            .with_help_message(
+                                "Build commands will be executed in the order they are entered",
+                            )
+                            .prompt()?;
+                        cmds.push(cmd);
+                        let more_cmds = inquire::Confirm::new(
+                            "Do you have additional build commands to enter?",
+                        )
+                        .prompt()?;
+                        if !more_cmds {
+                            break;
+                        }
+                    }
+                    Ok(cmds)
+                },
+            )?;
         }
-        Ok(ResolvedCreateDatasetArgs { name, repo })
+        Ok(ResolvedCreateDatasetArgs {
+            name,
+            repo,
+            binaries,
+            build_commands,
+            dry_run,
+        })
     }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, Display)]
-#[strum(serialize_all = "lowercase")]
+#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
 #[clap(rename_all = "lowercase")]
 pub enum ForgeChoice {
     GitHub,
     GitLab,
     Gitea,
     Other,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum, Display)]
+#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
+#[clap(rename_all = "lowercase")]
+pub enum FormatChoice {
+    Csv,
+    Parquet,
+    Jsonl,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, Display)]
@@ -253,10 +325,46 @@ pub enum RepresentationChoice {
 pub struct ResolvedCreateDatasetArgs {
     name: String,
     repo: FileSource,
+    binaries: Vec<PathBuf>,
+    build_commands: Vec<String>,
+    dry_run: bool,
 }
 
-pub fn create_source_dataset(
-    ResolvedCreateDatasetArgs { name, repo }: ResolvedCreateDatasetArgs,
+pub fn create_dataset(
+    ResolvedCreateDatasetArgs {
+        binaries,
+        build_commands,
+        name,
+        repo,
+        dry_run: hide,
+    }: ResolvedCreateDatasetArgs,
 ) -> Result<DatasetKind> {
-    todo!()
+    let cfg = config::get();
+    let display_progress = cfg.display.progress;
+    let mode = if binaries.is_empty() {
+        Mode::SourceOnly
+    } else {
+        Mode::SourceAndBinary {
+            build_commands,
+            strip: false,
+            decompilers: vec!["Ghidra"].iter().map(ToString::to_string).collect(),
+        }
+    };
+    let dataset = codablellm::run_with_options(
+        repo,
+        mode,
+        &Options {
+            display_progress,
+            dry_run: hide,
+            repo_options: repo::Options {
+                display_progress,
+                ..Default::default()
+            },
+            extractor_options: extractor::Options { display_progress },
+            decompiler_options: decompiler::Options { display_progress },
+            mapper_options: mapper::Options { display_progress },
+            dataset_options: dataset::Options { display_progress },
+        },
+    )?;
+    Ok(dataset)
 }

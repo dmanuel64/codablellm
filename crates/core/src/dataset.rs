@@ -8,10 +8,6 @@ use thiserror::Error;
 
 use crate::{FileSource, function::Function, storage};
 
-pub static DATASETS_DIR: LazyLock<PathBuf> = LazyLock::new(|| storage::DATA_DIR.join("datasets"));
-
-pub static SCRIPTS_DIR: LazyLock<PathBuf> = LazyLock::new(|| storage::DATA_DIR.join("scripts"));
-
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("failed to create dataset: {0}")]
@@ -21,9 +17,8 @@ pub enum Error {
 }
 
 #[derive(Debug, Default)]
-pub struct Options<'a> {
+pub struct Options {
     pub display_progress: bool,
-    pub script_options: ScriptOptions<'a>,
 }
 
 pub trait Dataset {
@@ -132,9 +127,9 @@ impl Script {
     }
 
     pub fn new_with_options(path: &Path, options: &ScriptOptions) -> Result<Self, storage::Error> {
-        let name = path.to_string_lossy().to_string();
-        let dest = SCRIPTS_DIR.join(name);
-        storage::copy_data("script", path, &dest, false)?;
+        let name = path.display().to_string();
+        // let dest = SCRIPTS_DIR.join(name);
+        // storage::copy_data("script", path, &dest, false)?;
         Ok(Self {
             engine: options.engine,
         })
