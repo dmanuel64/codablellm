@@ -24,13 +24,13 @@ pub enum Error {
 }
 
 struct Manager {
-    source: FileSource,
+    source: repo::Source,
     mode: Mode,
     progress: ProgressBar,
 }
 
 impl Manager {
-    pub fn new(source: FileSource, mode: Mode, display_progress: bool) -> Self {
+    pub fn new(source: repo::Source, mode: Mode, display_progress: bool) -> Self {
         let progress = if display_progress {
             ProgressBar::no_length()
         } else {
@@ -137,13 +137,13 @@ impl Default for Options {
     }
 }
 
-pub fn run(source: FileSource, mode: Mode) -> Result<dataset::Kind, Error> {
+pub fn run(source: repo::Source, mode: Mode) -> Result<dataset::Kind, Error> {
     run_with_options(source, mode, &Options::default())
 }
 
 #[instrument(name = "pipeline", skip(options))]
 pub fn run_with_options(
-    source: FileSource,
+    source: repo::Source,
     mode: Mode,
     options: &Options,
 ) -> Result<dataset::Kind, Error> {

@@ -2,8 +2,8 @@ use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, sync::OnceLock};
 
 use clap::{Args, ValueEnum};
 use codablellm::{
-    DatasetKind, FileSource, Language, Mode, Options, dataset, decompiler, extractor, language,
-    mapper, repo,
+    DatasetKind, FileSource, Language, Mode, Options, RepoMetadata, RepoSource, dataset,
+    decompiler, extractor, mapper, repo,
 };
 use color_eyre::eyre::Result;
 use inquire::required;
@@ -11,6 +11,7 @@ use strum::Display;
 
 use crate::{
     config,
+    errors::user_error,
     resolver::{IntoResolved, require_or_prompt},
 };
 
@@ -21,27 +22,22 @@ const BUILDER_OPTS_HEADING: &str = "Builder Options";
 const DECOMPILER_OPTS_HEADING: &str = "Decompiler Options";
 const DATASET_OPTS_HEADING: &str = "Dataset Options";
 
-fn inferred_forge(val: &str) -> &'static Result<Option<ForgeChoice>> {
-    static FORGE_CHOICE: OnceLock<Result<Option<ForgeChoice>>> = OnceLock::new();
-
-    let choice = FORGE_CHOICE.get_or_init(|| {
-        if let FileSource::Remote(f) = FileSource::from_str(val)? {
-            let url = f.url;
-            let choice = if let Some(_) = repo::Metadata::from_gitlab(&url) {
-                ForgeChoice::GitHub
-            } else if let Some(_) = repo::Metadata::from_gitlab(&url) {
-                ForgeChoice::GitLab
-            } else if let Some(_) = repo::Metadata::from_gitea(&url) {
-                ForgeChoice::Gitea
-            } else {
-                ForgeChoice::Other
-            };
-            Ok(Some(choice))
+fn infer_metadata(val: &str) -> Result<Option<RepoMetadata>> {
+    if let FileSource::Remote(f) = FileSource::from_str(val)? {
+        let url = f.url;
+        let metadata = if let Some(m) = RepoMetadata::from_gitlab(&url) {
+            Some(m)
+        } else if let Some(m) = RepoMetadata::from_gitlab(&url) {
+            Some(m)
+        } else if let Some(m) = RepoMetadata::from_gitea(&url) {
+            Some(m)
         } else {
-            Ok(None)
-        }
-    });
-    choice
+            None
+        };
+        Ok(metadata)
+    } else {
+        Ok(None)
+    }
 }
 
 #[derive(Debug, Args)]
@@ -127,7 +123,7 @@ pub struct CreateDatasetArgs {
     #[arg(short, long, visible_alias = "out")]
     output: Option<PathBuf>,
 
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "ref", visible_aliases = ["rev", "branch", "tag"], required_if_eq("forge", "other"))]
+    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "ref", visible_aliases = ["rev", "branch", "tag"])]
     git_ref: Option<String>,
 
     #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "owner", required_if_eq("forge", "other"))]
@@ -223,7 +219,7 @@ impl IntoResolved for CreateDatasetArgs {
         })?;
         let is_compiled_dataset = !binaries.is_empty()
             || !build_commands.is_empty()
-            || (interactive
+            || (prompted
                 && inquire::Confirm::new("Is this a compiled code dataset?")
                     .with_default(false)
                     .prompt()?);
@@ -289,6 +285,28 @@ impl IntoResolved for CreateDatasetArgs {
             binaries,
             build_commands,
             dry_run,
+            forge,
+            token,
+            insecure,
+            ca_cert,
+            decompilers,
+            strip,
+            representations,
+            force,
+            output,
+            git_ref,
+            repo_owner,
+            repo_name,
+            remove,
+            include,
+            exclude,
+            languages,
+            jobs,
+            extractor_jobs,
+            decompiler_jobs,
+            scripts,
+            paired,
+            format,
         })
     }
 }
@@ -325,8 +343,30 @@ pub enum RepresentationChoice {
 pub struct ResolvedCreateDatasetArgs {
     name: String,
     repo: FileSource,
+    forge: Option<ForgeChoice>,
+    token: Option<String>,
+    insecure: bool,
+    ca_cert: Option<PathBuf>,
     binaries: Vec<PathBuf>,
     build_commands: Vec<String>,
+    decompilers: Vec<String>,
+    strip: bool,
+    representations: Vec<RepresentationChoice>,
+    force: bool,
+    output: Option<PathBuf>,
+    git_ref: Option<String>,
+    repo_owner: Option<String>,
+    repo_name: Option<String>,
+    remove: bool,
+    include: Vec<PathBuf>,
+    exclude: Vec<PathBuf>,
+    languages: Vec<Language>,
+    jobs: Option<NonZeroUsize>,
+    extractor_jobs: Option<NonZeroUsize>,
+    decompiler_jobs: Option<NonZeroUsize>,
+    scripts: Vec<PathBuf>,
+    paired: bool,
+    format: FormatChoice,
     dry_run: bool,
 }
 
@@ -336,7 +376,29 @@ pub fn create_dataset(
         build_commands,
         name,
         repo,
-        dry_run: hide,
+        dry_run,
+        forge,
+        token,
+        insecure,
+        ca_cert,
+        decompilers,
+        strip,
+        representations,
+        force,
+        output,
+        git_ref,
+        repo_owner,
+        repo_name,
+        remove,
+        include,
+        exclude,
+        languages,
+        jobs,
+        extractor_jobs,
+        decompiler_jobs,
+        scripts,
+        paired,
+        format,
     }: ResolvedCreateDatasetArgs,
 ) -> Result<DatasetKind> {
     let cfg = config::get();
@@ -350,12 +412,28 @@ pub fn create_dataset(
             decompilers: vec!["Ghidra"].iter().map(ToString::to_string).collect(),
         }
     };
+    let metadata = if let (Some(owner), Some(name), git_ref) = (repo_owner, repo_name, git_ref) {
+        RepoMetadata {
+            owner,
+            name,
+            git_ref,
+        }
+    } else if let Some(m) = infer_metadata(&repo.to_string())? {
+        m
+    } else {
+        return Err(user_error("--owner <REPO_OWNER> and --name <REPO_NAME> are required when using local repositories or non-standard forges").into());
+    };
+    let source = RepoSource {
+        metadata,
+        path: repo,
+    };
+
     let dataset = codablellm::run_with_options(
-        repo,
+        source,
         mode,
         &Options {
             display_progress,
-            dry_run: hide,
+            dry_run,
             repo_options: repo::Options {
                 display_progress,
                 ..Default::default()

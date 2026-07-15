@@ -31,6 +31,7 @@ impl Repository {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Source {
     pub metadata: Metadata,
     pub path: FileSource,
@@ -80,6 +81,7 @@ fn split_owner_repo(path: &[&str]) -> Option<(String, String)> {
     Some((owner.join("/"), strip_git_suffix(repo).to_string()))
 }
 
+#[derive(Debug, Clone)]
 pub struct Metadata {
     pub owner: String,
     pub name: String,
