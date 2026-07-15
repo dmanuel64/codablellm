@@ -65,14 +65,14 @@ fn init_logger(verbosity: u8) -> tracing_appender::non_blocking::WorkerGuard {
     guard
 }
 
-fn run() -> Result<()> {
+async fn run() -> Result<()> {
     install_error_handlers()?;
     let args = Cli::parse();
     let _guard = init_logger(args.verbose);
     let no_input = !config::get().display.interactive;
     match args.command {
         Commands::Create(args) => {
-            let dataset = create::create_dataset(resolver::resolve(args, no_input)?)?;
+            let dataset = create::create_dataset(resolver::resolve(args, no_input)?).await?;
             Ok(())
         }
         Commands::Config(command) => config::run(command),
@@ -80,8 +80,9 @@ fn run() -> Result<()> {
     }
 }
 
-fn main() -> Result<()> {
-    if let Err(report) = run() {
+#[tokio::main]
+async fn main() -> Result<()> {
+    if let Err(report) = run().await {
         if let Some(clap_err) = report.downcast_ref::<clap::Error>() {
             clap_err.exit()
         }

@@ -34,3 +34,5 @@ mimalloc = "0.1"
 serde = { version = "1", features = ["derive"] }
 toml = "1"
 tracing = "0.1"
+# TODO: figure out the bare-minimum needed for tokio
+tokio = { version = "1", features = ["full"] }

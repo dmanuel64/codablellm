@@ -8,7 +8,11 @@ use tracing::instrument;
 use crate::{
     FileSource, builder,
     dataset::{self, Dataset},
-    decompiler, extractor, language, mapper, repo, storage,
+    decompiler, extractor,
+    function::Function,
+    language, mapper,
+    repo::{self, Repository},
+    storage,
 };
 
 #[derive(Debug, Error)]
@@ -27,11 +31,14 @@ struct Manager {
     source: repo::Source,
     mode: Mode,
     progress: ProgressBar,
+    options: Options,
+    repo: Option<Repository>,
+    extracted_functions: Vec<Function>,
 }
 
 impl Manager {
-    pub fn new(source: repo::Source, mode: Mode, display_progress: bool) -> Self {
-        let progress = if display_progress {
+    pub fn new(source: repo::Source, mode: Mode, options: Options) -> Self {
+        let progress = if options.display_progress {
             ProgressBar::no_length()
         } else {
             ProgressBar::hidden()
@@ -41,11 +48,14 @@ impl Manager {
             source,
             mode,
             progress,
+            options,
+            repo: None,
+            extracted_functions: Vec::new(),
         }
     }
 
     /// Some docstring
-    pub fn run(&self) -> Result<dataset::Kind, Error> {
+    pub async fn run(&mut self) -> Result<dataset::Kind, Error> {
         let stages = if matches!(self.mode, Mode::SourceOnly) {
             tracing::info!("Starting pipeline for source code dataset");
             Box::new(Stage::iter_source_stages()) as Box<dyn Iterator<Item = Stage>>
@@ -58,21 +68,41 @@ impl Manager {
                 %stage,
                 "Executing pipeline stage"
             );
-            self.process(&stage)?;
+            self.process(&stage).await?;
         }
         todo!("path to dataset")
     }
 
-    fn process(&self, stage: &Stage) -> Result<(), Error> {
+    async fn process(&mut self, stage: &Stage) -> Result<(), Error> {
         match stage {
-            Stage::Pulling => todo!(),
-            Stage::ExtractSourceCode => todo!(),
-            Stage::SetupBuilder => todo!(),
+            Stage::Pulling => {
+                self.repo = Some(repo::fetch_with_options(
+                    self.source.clone(),
+                    &self.options.repo_options,
+                )?);
+            }
+            Stage::ExtractSourceCode => {
+                self.extracted_functions = extractor::extract_with_options(
+                    self.repo.as_ref().expect("repo to have been pulled"),
+                    &self.options.extractor_options,
+                )?;
+            }
+            Stage::SetupBuilder => {
+                let bin_mode = self.mode.as_binary_mode();
+                let artifacts: Vec<_> = bin_mode.binaries.iter().map(PathBuf::as_path).collect();
+                let commands: Vec<_> = bin_mode.build_commands.iter().map(String::as_str).collect();
+                builder::build(
+                    &self.repo.as_ref().expect("repo to have been pulled"),
+                    &commands,
+                    &artifacts,
+                )
+                .await?;
+            }
             Stage::BuildCode => todo!(),
             Stage::DecompileBinaries => todo!(),
             Stage::MapCode => todo!(),
             Stage::CreateDataset => todo!(),
-        }
+        };
         Ok(())
     }
 }
@@ -103,13 +133,26 @@ impl Stage {
 }
 
 #[derive(Debug, Clone)]
+pub struct BinaryMode {
+    pub build_commands: Vec<String>,
+    pub binaries: Vec<PathBuf>,
+    pub strip: bool,
+    pub decompilers: HashSet<String>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Mode {
     SourceOnly,
-    SourceAndBinary {
-        build_commands: Vec<String>,
-        strip: bool,
-        decompilers: HashSet<String>,
-    },
+    SourceAndBinary(BinaryMode),
+}
+
+impl Mode {
+    pub fn as_binary_mode(&self) -> BinaryMode {
+        let Mode::SourceAndBinary(mode) = self else {
+            unreachable!("expected SourceAndBinary mode during a binary stage")
+        };
+        mode.clone()
+    }
 }
 
 #[derive(Debug)]
@@ -137,16 +180,16 @@ impl Default for Options {
     }
 }
 
-pub fn run(source: repo::Source, mode: Mode) -> Result<dataset::Kind, Error> {
-    run_with_options(source, mode, &Options::default())
+pub async fn run(source: repo::Source, mode: Mode) -> Result<dataset::Kind, Error> {
+    run_with_options(source, mode, Options::default()).await
 }
 
 #[instrument(name = "pipeline", skip(options))]
-pub fn run_with_options(
+pub async fn run_with_options(
     source: repo::Source,
     mode: Mode,
-    options: &Options,
+    options: Options,
 ) -> Result<dataset::Kind, Error> {
     tracing::trace!(?options);
-    Manager::new(source, mode, options.display_progress).run()
+    Manager::new(source, mode, options).run().await
 }

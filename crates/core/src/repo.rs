@@ -188,7 +188,7 @@ impl Default for Options {
 }
 
 pub fn fetch(source: Source) -> Result<Repository, Error> {
-    fetch_with_options(source, Options::default())
+    fetch_with_options(source, &Options::default())
 }
 
 pub fn fetch_with_options(
@@ -196,7 +196,7 @@ pub fn fetch_with_options(
     Options {
         display_progress,
         request_builder,
-    }: Options,
+    }: &Options,
 ) -> Result<Repository, Error> {
     todo!()
 }

@@ -2,8 +2,8 @@ use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, sync::OnceLock};
 
 use clap::{Args, ValueEnum};
 use codablellm::{
-    DatasetKind, FileSource, Language, Mode, Options, RepoMetadata, RepoSource, dataset,
-    decompiler, extractor, mapper, repo,
+    BinaryMode, DatasetKind, FileSource, Language, Mode, Options, RepoMetadata, RepoSource,
+    dataset, decompiler, extractor, mapper, repo,
 };
 use color_eyre::eyre::Result;
 use inquire::required;
@@ -370,7 +370,7 @@ pub struct ResolvedCreateDatasetArgs {
     dry_run: bool,
 }
 
-pub fn create_dataset(
+pub async fn create_dataset(
     ResolvedCreateDatasetArgs {
         binaries,
         build_commands,
@@ -406,11 +406,12 @@ pub fn create_dataset(
     let mode = if binaries.is_empty() {
         Mode::SourceOnly
     } else {
-        Mode::SourceAndBinary {
+        Mode::SourceAndBinary(BinaryMode {
+            binaries: binaries,
             build_commands,
             strip: false,
             decompilers: vec!["Ghidra"].iter().map(ToString::to_string).collect(),
-        }
+        })
     };
     let metadata = if let (Some(owner), Some(name), git_ref) = (repo_owner, repo_name, git_ref) {
         RepoMetadata {
@@ -431,7 +432,7 @@ pub fn create_dataset(
     let dataset = codablellm::run_with_options(
         source,
         mode,
-        &Options {
+        Options {
             display_progress,
             dry_run,
             repo_options: repo::Options {
@@ -443,6 +444,7 @@ pub fn create_dataset(
             mapper_options: mapper::Options { display_progress },
             dataset_options: dataset::Options { display_progress },
         },
-    )?;
+    )
+    .await?;
     Ok(dataset)
 }

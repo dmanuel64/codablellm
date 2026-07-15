@@ -61,7 +61,7 @@ async fn create_builder_container(conn: &Docker) -> Result<String, Error> {
 }
 
 /// Builds a repository in a builder container given a build command, and paths to where the expected build artifacts reside
-pub async fn build(repo: &Repository, command: &str, artifacts: &[&Path]) -> Result<(), Error> {
+pub async fn build(repo: &Repository, commands: &[&str], artifacts: &[&Path]) -> Result<(), Error> {
     let conn = Docker::connect_with_defaults().map_err(|e| Error::DockerConnectionError(e))?;
     create_builder_image(&conn).await?;
     let name = create_builder_container(&conn).await?;
