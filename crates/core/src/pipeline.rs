@@ -55,7 +55,7 @@ impl Manager {
     }
 
     /// Some docstring
-    pub async fn run(&mut self) -> Result<dataset::Kind, Error> {
+    pub async fn run(&mut self) -> Result<dataset::Dataset, Error> {
         let stages = if matches!(self.mode, Mode::SourceOnly) {
             tracing::info!("Starting pipeline for source code dataset");
             Box::new(Stage::iter_source_stages()) as Box<dyn Iterator<Item = Stage>>
@@ -91,10 +91,22 @@ impl Manager {
                 let bin_mode = self.mode.as_binary_mode();
                 let artifacts: Vec<_> = bin_mode.binaries.iter().map(PathBuf::as_path).collect();
                 let commands: Vec<_> = bin_mode.build_commands.iter().map(String::as_str).collect();
+                // TODO: host-detected placeholder until target/arch become a
+                // real user-facing option (e.g. a --target/--arch CLI flag).
+                let target = match std::env::consts::OS {
+                    "windows" => builder::Target::Windows,
+                    _ => builder::Target::Ubuntu,
+                };
+                let arch = match std::env::consts::ARCH {
+                    "aarch64" => builder::Architecture::Arm64,
+                    _ => builder::Architecture::Amd64,
+                };
                 builder::build(
                     &self.repo.as_ref().expect("repo to have been pulled"),
                     &commands,
                     &artifacts,
+                    target,
+                    arch,
                 )
                 .await?;
             }
@@ -180,7 +192,7 @@ impl Default for Options {
     }
 }
 
-pub async fn run(source: repo::Source, mode: Mode) -> Result<dataset::Kind, Error> {
+pub async fn run(source: repo::Source, mode: Mode) -> Result<dataset::Dataset, Error> {
     run_with_options(source, mode, Options::default()).await
 }
 
@@ -189,7 +201,7 @@ pub async fn run_with_options(
     source: repo::Source,
     mode: Mode,
     options: Options,
-) -> Result<dataset::Kind, Error> {
+) -> Result<dataset::Dataset, Error> {
     tracing::trace!(?options);
     Manager::new(source, mode, options).run().await
 }

@@ -3,7 +3,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
-#[derive(Debug, Clone, Display, EnumIter)]
+#[derive(Debug, Clone, Copy, Display, EnumIter)]
 #[strum(serialize_all = "lowercase", ascii_case_insensitive)]
 #[cfg_attr(
     feature = "value-enums",

@@ -21,28 +21,16 @@ pub struct Options {
     pub display_progress: bool,
 }
 
-pub trait Dataset {
-    fn df(&self) -> &DataFrame;
-    fn df_mut(&mut self) -> &mut DataFrame;
-}
-
-pub enum Kind {
+pub enum Dataset {
     Source(SourceDataset),
     Binary(BinaryDataset),
 }
 
-impl Dataset for Kind {
+impl Dataset {
     fn df(&self) -> &DataFrame {
         match self {
-            Self::Source(d) => d.df(),
-            Self::Binary(d) => d.df(),
-        }
-    }
-
-    fn df_mut(&mut self) -> &mut DataFrame {
-        match self {
-            Self::Source(d) => d.df_mut(),
-            Self::Binary(d) => d.df_mut(),
+            Self::Source(d) => &d.df,
+            Self::Binary(d) => &d.df,
         }
     }
 }
@@ -51,20 +39,10 @@ pub struct SourceDataset {
     df: DataFrame,
 }
 
-impl Dataset for SourceDataset {
-    fn df(&self) -> &DataFrame {
-        &self.df
-    }
-
-    fn df_mut(&mut self) -> &mut DataFrame {
-        &mut self.df
-    }
-}
-
 impl SourceDataset {
     pub fn new(functions: &Vec<Function>) -> Result<Self, Error> {
-        let names: Vec<&str> = functions.iter().map(|f| f.name.as_str()).collect();
-        let definitions: Vec<&str> = functions.iter().map(|f| f.name.as_str()).collect();
+        let names: Vec<&str> = functions.iter().map(|f| f.name()).collect();
+        let definitions: Vec<&str> = functions.iter().map(|f| f.name()).collect();
         let df = df!(
             "name" => names,
             "definitions" => definitions,
@@ -76,16 +54,6 @@ impl SourceDataset {
 
 pub struct BinaryDataset {
     df: DataFrame,
-}
-
-impl Dataset for BinaryDataset {
-    fn df(&self) -> &DataFrame {
-        &self.df
-    }
-
-    fn df_mut(&mut self) -> &mut DataFrame {
-        &mut self.df
-    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]

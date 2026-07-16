@@ -2,8 +2,8 @@ use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, sync::OnceLock};
 
 use clap::{Args, ValueEnum};
 use codablellm::{
-    BinaryMode, DatasetKind, FileSource, Language, Mode, Options, RepoMetadata, RepoSource,
-    dataset, decompiler, extractor, mapper, repo,
+    BinaryMode, Dataset, FileSource, Language, Mode, Options, RepoMetadata, RepoSource, dataset,
+    decompiler, extractor, mapper, repo,
 };
 use color_eyre::eyre::Result;
 use inquire::required;
@@ -400,7 +400,7 @@ pub async fn create_dataset(
         paired,
         format,
     }: ResolvedCreateDatasetArgs,
-) -> Result<DatasetKind> {
+) -> Result<Dataset> {
     let cfg = config::get();
     let display_progress = cfg.display.progress;
     let mode = if binaries.is_empty() {

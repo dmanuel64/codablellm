@@ -1,57 +1,115 @@
 use bollard::{
-    Docker, body_full,
+    Docker,
     plugin::ContainerCreateBody,
-    query_parameters::{BuildImageOptionsBuilder, CreateContainerOptionsBuilder},
+    query_parameters::{CreateContainerOptionsBuilder, CreateImageOptionsBuilder},
 };
-use futures_util::TryStreamExt;
+use futures_util::StreamExt;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
+use strum::{Display, EnumIter};
 use thiserror::Error;
 
 use crate::repo::Repository;
 
-const DOCKERFILE_SOURCE: &str = include_str!("../assets/builder.Dockerfile");
-const BUILDER_IMAGE_TAG: &str = "codablellm-builder:latest";
+#[derive(Debug, Clone, Copy, Display, EnumIter)]
+#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
+#[cfg_attr(
+    feature = "value-enums",
+    derive(clap::ValueEnum, Serialize, Deserialize),
+    serde(rename_all = "lowercase"),
+    clap(rename_all = "lowercase")
+)]
+pub enum Target {
+    Ubuntu,
+    Alpine,
+    Windows,
+}
+
+impl Target {
+    pub fn operating_system(&self) -> OperatingSystem {
+        match self {
+            Target::Alpine | Target::Ubuntu => OperatingSystem::Linux,
+            Target::Windows => OperatingSystem::Windows,
+        }
+    }
+
+    pub fn platform(&self, arch: &Architecture) -> String {
+        format!(
+            "{}/{}",
+            self.operating_system().to_string(),
+            arch.to_string()
+        )
+    }
+
+    fn image(&self, version: Option<&str>) -> String {
+        let version = version.unwrap_or("latest");
+        format!(
+            "dmanuel99/codablellm-builder:{}-{version}",
+            self.to_string()
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, Display, EnumIter)]
+#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
+pub enum OperatingSystem {
+    Linux,
+    Windows,
+}
+
+#[derive(Debug, Clone, Copy, Display, EnumIter)]
+#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
+#[cfg_attr(
+    feature = "value-enums",
+    derive(clap::ValueEnum, Serialize, Deserialize),
+    serde(rename_all = "lowercase"),
+    clap(rename_all = "lowercase")
+)]
+pub enum Architecture {
+    #[cfg_attr(feature = "value-enums", serde(alias = "x86_64"))]
+    Amd64,
+    Arm64,
+}
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("failed to create tarball containing builder Dockerfile")]
-    TarballError(#[source] std::io::Error),
     #[error("failed to connect to Docker")]
     DockerConnectionError(#[source] bollard::errors::Error),
+    #[error("failed to pull builder image")]
+    ImagePullError(#[source] bollard::errors::Error),
     #[error("failed to create builder container")]
     BuilderCreationError(#[source] bollard::errors::Error),
     #[error("failed to run build command: {0}")]
     BuildError(#[source] bollard::errors::Error),
 }
 
-async fn create_builder_image(conn: &Docker) -> Result<(), Error> {
-    let mut builder = tar::Builder::new(Vec::new());
-    let mut header = tar::Header::new_gnu();
-    header
-        .set_path("Dockerfile")
-        .map_err(|e| Error::TarballError(e))?;
-    header.set_size(DOCKERFILE_SOURCE.len() as u64);
-    header.set_mode(0o644);
-    header.set_cksum();
-    builder
-        .append(&header, DOCKERFILE_SOURCE.as_bytes())
-        .map_err(|e| Error::TarballError(e))?;
-    let tar_bytes = builder.into_inner().map_err(|e| Error::TarballError(e))?;
-
-    let options = BuildImageOptionsBuilder::default()
-        .dockerfile("Dockerfile")
-        .t(BUILDER_IMAGE_TAG)
-        .rm(true)
+/// Resolves the builder image for the given target/architecture, pulling it
+/// from the registry if it isn't already present locally.
+async fn resolve_builder_image(
+    conn: &Docker,
+    target: Target,
+    arch: Architecture,
+) -> Result<String, Error> {
+    let image = target.image(None);
+    if conn.inspect_image(&image).await.is_ok() {
+        return Ok(image);
+    }
+    let options = CreateImageOptionsBuilder::default()
+        .from_image(&image)
+        .platform(&target.platform(&arch))
         .build();
-
-    _ = conn.build_image(options, None, Some(body_full(tar_bytes.into())));
-    Ok(())
+    let mut pull = conn.create_image(Some(options), None, None);
+    while let Some(result) = pull.next().await {
+        result.map_err(Error::ImagePullError)?;
+    }
+    Ok(image)
 }
 
-async fn create_builder_container(conn: &Docker) -> Result<String, Error> {
+async fn create_builder_container(conn: &Docker, image: &str) -> Result<String, Error> {
     let name = "codablellm-builder";
     let options = CreateContainerOptionsBuilder::default().name(name).build();
     let config = ContainerCreateBody {
+        image: Some(image.to_string()),
         ..Default::default()
     };
     conn.create_container(Some(options), config)
@@ -61,10 +119,16 @@ async fn create_builder_container(conn: &Docker) -> Result<String, Error> {
 }
 
 /// Builds a repository in a builder container given a build command, and paths to where the expected build artifacts reside
-pub async fn build(repo: &Repository, commands: &[&str], artifacts: &[&Path]) -> Result<(), Error> {
+pub async fn build(
+    repo: &Repository,
+    commands: &[&str],
+    artifacts: &[&Path],
+    target: Target,
+    arch: Architecture,
+) -> Result<(), Error> {
     let conn = Docker::connect_with_defaults().map_err(|e| Error::DockerConnectionError(e))?;
-    create_builder_image(&conn).await?;
-    let name = create_builder_container(&conn).await?;
+    let image = resolve_builder_image(&conn, target, arch).await?;
+    let name = create_builder_container(&conn, &image).await?;
     conn.start_container(&name, None)
         .await
         .map_err(|e| Error::BuildError(e))

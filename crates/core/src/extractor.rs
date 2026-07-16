@@ -73,6 +73,8 @@ pub fn extract_with_options(
 }
 
 fn query_functions(
+    file: PathBuf,
+    language: Language,
     source: &[u8],
     node: tree_sitter::Node,
     sexp: &str,
@@ -102,7 +104,17 @@ fn query_functions(
                 .utf8_text(source)
                 .map_err(Utf8Error::from)?
                 .to_string();
-            functions.push(Function { name, definition });
+            let range = def.node.range();
+            let line_range = range.start_point.row..range.end_point.row;
+            let column_range = range.start_point.column..range.end_point.column;
+            functions.push(Function::Source {
+                name,
+                definition,
+                file: file.clone(),
+                language,
+                line_range,
+                column_range,
+            });
         }
     }
     Ok(functions)
@@ -130,6 +142,8 @@ fn parse(
 fn extract_c_file(parser: &mut tree_sitter::Parser, path: &Path) -> Result<Vec<Function>, Error> {
     let (tree, source) = parse(parser, &tree_sitter_c::LANGUAGE.into(), path)?;
     query_functions(
+        path.to_path_buf(),
+        Language::C,
         &source,
         tree.root_node(),
         r#"
@@ -144,6 +158,8 @@ fn extract_c_file(parser: &mut tree_sitter::Parser, path: &Path) -> Result<Vec<F
 fn extract_cpp_file(parser: &mut tree_sitter::Parser, path: &Path) -> Result<Vec<Function>, Error> {
     let (tree, source) = parse(parser, &tree_sitter_cpp::LANGUAGE.into(), path)?;
     query_functions(
+        path.to_path_buf(),
+        Language::Cpp,
         &source,
         tree.root_node(),
         r#"
@@ -161,6 +177,8 @@ fn extract_python_file(
 ) -> Result<Vec<Function>, Error> {
     let (tree, source) = parse(parser, &tree_sitter_python::LANGUAGE.into(), path)?;
     query_functions(
+        path.to_path_buf(),
+        Language::Python,
         &source,
         tree.root_node(),
         r#"
@@ -177,6 +195,8 @@ fn extract_javascript_file(
 ) -> Result<Vec<Function>, Error> {
     let (tree, source) = parse(parser, &tree_sitter_javascript::LANGUAGE.into(), path)?;
     query_functions(
+        path.to_path_buf(),
+        Language::JavaScript,
         &source,
         tree.root_node(),
         r#"
@@ -201,6 +221,8 @@ fn extract_typescript_file(
     };
     let (tree, source) = parse(parser, &language.into(), path)?;
     query_functions(
+        path.to_path_buf(),
+        Language::TypeScript,
         &source,
         tree.root_node(),
         r#"
@@ -217,6 +239,8 @@ fn extract_typescript_file(
 fn extract_go_file(parser: &mut tree_sitter::Parser, path: &Path) -> Result<Vec<Function>, Error> {
     let (tree, source) = parse(parser, &tree_sitter_go::LANGUAGE.into(), path)?;
     query_functions(
+        path.to_path_buf(),
+        Language::Go,
         &source,
         tree.root_node(),
         r#"
@@ -236,6 +260,8 @@ fn extract_rust_file(
 ) -> Result<Vec<Function>, Error> {
     let (tree, source) = parse(parser, &tree_sitter_rust::LANGUAGE.into(), path)?;
     query_functions(
+        path.to_path_buf(),
+        Language::Rust,
         &source,
         tree.root_node(),
         r#"
@@ -252,6 +278,8 @@ fn extract_java_file(
 ) -> Result<Vec<Function>, Error> {
     let (tree, source) = parse(parser, &tree_sitter_java::LANGUAGE.into(), path)?;
     query_functions(
+        path.to_path_buf(),
+        Language::Java,
         &source,
         tree.root_node(),
         r#"
@@ -268,6 +296,8 @@ fn extract_csharp_file(
 ) -> Result<Vec<Function>, Error> {
     let (tree, source) = parse(parser, &tree_sitter_c_sharp::LANGUAGE.into(), path)?;
     query_functions(
+        path.to_path_buf(),
+        Language::CSharp,
         &source,
         tree.root_node(),
         r#"
