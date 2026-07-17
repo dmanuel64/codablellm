@@ -2,11 +2,11 @@ use directories::ProjectDirs;
 use flate2::read::GzDecoder;
 use fs_extra::{dir, file};
 use indicatif::ProgressBar;
-use reqwest::blocking::Client;
+use reqwest::Client;
 use std::{
     fmt::Display,
     fs::File,
-    io,
+    io::{self, Write},
     path::{Path, PathBuf},
     str::FromStr,
     sync::LazyLock,
@@ -168,13 +168,13 @@ impl Display for FileSource {
     }
 }
 
-pub(crate) fn download_file(
+pub(crate) async fn download_file(
     src: &RemoteFile,
     dest: &File,
     display_progress: bool,
 ) -> Result<(), Error> {
     // Get size of the remote archive
-    let head_response = HTTP_CLIENT.head(src.url.as_ref()).send()?;
+    let head_response = HTTP_CLIENT.head(src.url.as_ref()).send().await?;
     let repo_size = head_response.content_length();
     let progress = if !display_progress {
         ProgressBar::hidden()
@@ -185,9 +185,11 @@ pub(crate) fn download_file(
     };
     // Fetch archive and stream to temporary archive
     progress.set_message("Fetching repo...");
-    let mut get_response = HTTP_CLIENT.get(src.url.as_ref()).send()?;
+    let mut get_response = HTTP_CLIENT.get(src.url.as_ref()).send().await?;
     let mut writer = progress.wrap_write(dest);
-    io::copy(&mut get_response, &mut writer).map_err(|e| Error::Streaming(e))?;
+    while let Some(chunk) = get_response.chunk().await? {
+        writer.write_all(&chunk).map_err(Error::Streaming)?;
+    }
     Ok(())
 }
 

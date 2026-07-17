@@ -5,8 +5,7 @@ use url::Url;
 
 use crate::{FileSource, language::Language, storage};
 
-pub static ARCHIVES_ROOT: LazyLock<PathBuf> = LazyLock::new(|| storage::CACHE_DIR.join("repos"));
-pub static REPOS_ROOT: LazyLock<PathBuf> = LazyLock::new(|| storage::DATA_DIR.join("repos"));
+pub static REPOS_ROOT: LazyLock<PathBuf> = LazyLock::new(|| storage::CACHE_DIR.join("repos"));
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -175,7 +174,7 @@ impl Metadata {
 #[derive(Debug)]
 pub struct Options {
     pub display_progress: bool,
-    pub request_builder: Option<reqwest::blocking::ClientBuilder>,
+    pub request_builder: Option<reqwest::ClientBuilder>,
 }
 
 impl Default for Options {
@@ -185,6 +184,10 @@ impl Default for Options {
             request_builder: None,
         }
     }
+}
+
+fn clone(url: &Url) -> Result<Repository, Error> {
+    todo!()
 }
 
 pub fn fetch(source: Source) -> Result<Repository, Error> {
