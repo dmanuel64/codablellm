@@ -1,6 +1,6 @@
 use crate::storage;
 use clap::{Args, Subcommand, ValueEnum};
-use codablellm::Language;
+use codablellm_core::Language;
 use color_eyre::eyre::Result;
 use figment::{
     Figment,

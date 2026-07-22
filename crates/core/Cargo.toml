@@ -1,5 +1,5 @@
 [package]
-name = "codablellm"
+name = "codablellm-core"
 version.workspace = true
 edition.workspace = true
 description.workspace = true

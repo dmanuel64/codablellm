@@ -7,7 +7,7 @@ mod resolver;
 use std::io;
 
 use clap::{ArgAction, Parser, Subcommand};
-use codablellm::storage;
+use codablellm_core::storage;
 use color_eyre::eyre::Result;
 use mimalloc::MiMalloc;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};

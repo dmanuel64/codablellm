@@ -2,8 +2,6 @@ import "globals.just"
 
 arch := arch()
 
-default: rust
-
 rust *args:
     {{ cargo }} build {{ args }}
 

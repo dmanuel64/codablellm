@@ -1,5 +1,5 @@
 [package]
-name = "codablellm-cli"
+name = "codablellm"
 version = "0.1.0"
 edition.workspace = true
 description.workspace = true
@@ -15,7 +15,7 @@ name = "codablellm"
 path = "src/main.rs"
 
 [dependencies]
-codablellm = { workspace = true, features = ["full", "value-enums"] }
+codablellm-core = { workspace = true, features = ["full", "value-enums"] }
 
 color-eyre.workspace = true
 human-panic.workspace = true

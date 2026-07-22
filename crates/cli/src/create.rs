@@ -1,7 +1,7 @@
 use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, sync::OnceLock};
 
 use clap::{Args, ValueEnum};
-use codablellm::{
+use codablellm_core::{
     BinaryMode, Dataset, FileSource, Language, Mode, Options, RepoMetadata, RepoSource, dataset,
     decompiler, extractor, mapper, repo,
 };
@@ -429,7 +429,7 @@ pub async fn create_dataset(
         path: repo,
     };
 
-    let dataset = codablellm::run_with_options(
+    let dataset = codablellm_core::run_with_options(
         source,
         mode,
         Options {
