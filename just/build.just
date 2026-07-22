@@ -2,6 +2,11 @@ import "globals.just"
 
 arch := arch()
 
+default: rust
+
+rust *args:
+    {{ cargo }} build {{ args }}
+
 [arg("install", long="install", value="true")]
 python install="true":
     {{ uv }} run maturin build
