@@ -1,19 +1,18 @@
 use directories::ProjectDirs;
-use flate2::read::GzDecoder;
-use fs_extra::{dir, file};
-use indicatif::ProgressBar;
+use indicatif::{MultiProgress, ProgressBar};
 use reqwest::Client;
 use std::{
     fmt::Display,
     fs::File,
-    io::{self, Write},
+    io::{self, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     str::FromStr,
     sync::LazyLock,
 };
-use tar::Archive;
 use thiserror::Error;
+use tokio::{fs, task};
 use url::Url;
+use zip::{ZipArchive, result::ZipError};
 
 static DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
     ProjectDirs::from("io.github", "dmanuel64", "codablellm")
@@ -33,33 +32,59 @@ static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| Client::new());
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("{0}")]
-    Io(#[from] fs_extra::error::Error),
+    Io(#[from] tokio::io::Error),
     #[error("{kind} \"{name}\": {kind} already exists")]
     DataExists { kind: &'static str, name: String },
     #[error("{kind} \"{name}\": {kind} does not exist")]
     DataNotFound { kind: &'static str, name: String },
-    #[error("could not determine the source type of the data")]
-    AmbiguousSource,
+    #[error("unsupported URL scheme")]
+    UnsupportedScheme,
     #[error("failed to fetch data: {0}")]
     Fetch(#[from] reqwest::Error),
     #[error("failed to stream data")]
     Streaming(#[source] io::Error),
-    #[error("failed to decompress repository")]
-    Decompression(#[source] io::Error),
+    #[error("failed to decompress tarball")]
+    Tar(#[source] io::Error),
+    #[error("failed to decompress zipfile")]
+    Zip(#[from] ZipError),
+    #[error("unsupported archive type: {ext}")]
+    UnsupportedArchive { ext: String },
+    #[error(transparent)]
+    TokioBlocking(#[from] tokio::task::JoinError),
 }
 
-// TODO: config doesn't seem the best spot for the io stuff
-pub(crate) fn ensure_dir_exists(path: &Path) -> Result<(), Error> {
-    dir::create_all(path, false).map_err(Error::from)
+// 1. Ensure directory exists (Native Async)
+pub(crate) async fn ensure_dir_exists(path: &Path) -> Result<(), Error> {
+    fs::create_dir_all(path).await.map_err(Error::from)
 }
 
-pub(crate) fn copy_data(
+// 2. Delete data (Native Async)
+pub(crate) async fn delete_data(kind: &'static str, path: &Path) -> Result<(), Error> {
+    // Note: path.exists() is blocking. Use fs::try_exists in async.
+    if !fs::try_exists(path).await.unwrap_or(false) {
+        return Err(Error::DataNotFound {
+            kind,
+            name: path.to_string_lossy().to_string(),
+        });
+    }
+
+    let result = if fs::metadata(path).await.map_err(Error::from)?.is_dir() {
+        fs::remove_dir_all(path).await // Recursively deletes a directory
+    } else {
+        fs::remove_file(path).await
+    };
+
+    result.map_err(Error::from)
+}
+
+// 3. Copy data (Native Async with a helper for recursive directory copy)
+pub(crate) async fn copy_data(
     kind: &'static str,
     src: &Path,
     dest: &Path,
     force: bool,
 ) -> Result<(), Error> {
-    if !force && dest.exists() {
+    if !force && fs::try_exists(dest).await.unwrap_or(false) {
         return Err(Error::DataExists {
             kind,
             name: src.to_string_lossy().to_string(),
@@ -67,114 +92,96 @@ pub(crate) fn copy_data(
     }
 
     if let Some(parent) = dest.parent() {
-        ensure_dir_exists(parent)?;
+        ensure_dir_exists(parent).await?;
     }
 
-    let result = if src.is_dir() {
-        let options = dir::CopyOptions::new().overwrite(force).content_only(true);
-        dir::copy(src, dest, &options)
-    } else {
-        let options = file::CopyOptions::new().overwrite(force);
-        file::copy(src, dest, &options)
-    };
+    let is_dir = fs::metadata(src).await.map_err(Error::from)?.is_dir();
 
-    result.map_err(Error::from)?;
+    if is_dir {
+        // Replicates fs_extra's content_only behavior asynchronously
+        copy_dir_contents(src, dest, force).await?;
+    } else {
+        if force || !fs::try_exists(dest).await.unwrap_or(false) {
+            fs::copy(src, dest).await.map_err(Error::from)?;
+        }
+    }
+
     Ok(())
 }
 
-pub(crate) fn delete_data(kind: &'static str, path: &Path) -> Result<(), Error> {
-    if !path.exists() {
-        return Err(Error::DataNotFound {
-            kind,
-            name: path.to_string_lossy().to_string(),
-        });
+// Helper function to recursively copy directory contents asynchronously
+async fn copy_dir_contents(src: &Path, dest: &Path, force: bool) -> Result<(), Error> {
+    fs::create_dir_all(dest).await.map_err(Error::from)?;
+    let mut entries = fs::read_dir(src).await.map_err(Error::from)?;
+
+    while let Some(entry) = entries.next_entry().await.map_err(Error::from)? {
+        let entry_path = entry.path();
+        let file_name = entry.file_name();
+        let new_dest = dest.join(file_name);
+
+        if entry.file_type().await.map_err(Error::from)?.is_dir() {
+            // Box::pin is needed only for async recursion definitions
+            Box::pin(copy_dir_contents(&entry_path, &new_dest, force)).await?;
+        } else {
+            if force || !fs::try_exists(&new_dest).await.unwrap_or(false) {
+                fs::copy(&entry_path, &new_dest)
+                    .await
+                    .map_err(Error::from)?;
+            }
+        }
     }
-
-    let result = if path.is_dir() {
-        dir::remove(path)
-    } else {
-        file::remove(path)
-    };
-
-    result.map_err(Error::from)
+    Ok(())
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct RequestOptions {}
 
 #[derive(Debug, Clone)]
-pub struct RemoteFile {
-    pub url: Url,
-    pub request_options: RequestOptions,
+pub enum Location {
+    Path(PathBuf),
+    Url(Url),
 }
 
-impl RemoteFile {
-    pub fn new(url: Url) -> Self {
-        Self::new_with_options(url, RequestOptions::default())
-    }
-
-    pub fn new_with_options(url: Url, request_options: RequestOptions) -> Self {
-        Self {
-            url,
-            request_options,
-        }
-    }
-}
-
-impl Display for RemoteFile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.url.to_string())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum FileSource {
-    Local(PathBuf),
-    Remote(RemoteFile),
-}
-
-impl FromStr for FileSource {
+impl FromStr for Location {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match Url::parse(s) {
-            Ok(url) if matches!(url.scheme(), "http" | "https") => {
-                Ok(FileSource::Remote(RemoteFile::new(url)))
-            }
+            Ok(url) if matches!(url.scheme(), "http" | "https") => Ok(Location::Url(url)),
             // single letter scheme = Windows drive path (C:\...)
-            Ok(url) if url.scheme().len() == 1 => Ok(FileSource::Local(PathBuf::from(s))),
-            // file:// → honor it as local
+            Ok(url) if url.scheme().len() == 1 => Ok(Location::Path(PathBuf::from(s))),
+            // file:// -> honor it as local
             Ok(url) if url.scheme() == "file" => url
                 .to_file_path()
-                .map(FileSource::Local)
-                .map_err(|_| Error::AmbiguousSource),
+                .map(Location::Path)
+                .map_err(|_| Error::UnsupportedScheme),
             // some other scheme we don't handle (ssh://, git://...) → explicit error
-            Ok(_) => Err(Error::AmbiguousSource), // or a clearer UnsupportedScheme
-            Err(_) => Ok(FileSource::Local(PathBuf::from(s))),
+            Ok(_) => Err(Error::UnsupportedScheme),
+            Err(_) => Ok(Location::Path(PathBuf::from(s))),
         }
     }
 }
 
-impl Display for FileSource {
+impl Display for Location {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}",
             match self {
-                FileSource::Local(path_buf) => path_buf.display().to_string(),
-                FileSource::Remote(remote_file) => remote_file.to_string(),
+                Location::Path(path_buf) => path_buf.display().to_string(),
+                Location::Url(remote_file) => remote_file.to_string(),
             }
         )
     }
 }
 
 pub(crate) async fn download_file(
-    src: &RemoteFile,
+    url: &Url,
     dest: &File,
     display_progress: bool,
 ) -> Result<(), Error> {
     // Get size of the remote archive
-    let head_response = HTTP_CLIENT.head(src.url.as_ref()).send().await?;
+    let head_response = HTTP_CLIENT.head(url.as_str()).send().await?;
     let repo_size = head_response.content_length();
     let progress = if !display_progress {
         ProgressBar::hidden()
@@ -185,7 +192,7 @@ pub(crate) async fn download_file(
     };
     // Fetch archive and stream to temporary archive
     progress.set_message("Fetching repo...");
-    let mut get_response = HTTP_CLIENT.get(src.url.as_ref()).send().await?;
+    let mut get_response = HTTP_CLIENT.get(url.as_str()).send().await?;
     let mut writer = progress.wrap_write(dest);
     while let Some(chunk) = get_response.chunk().await? {
         writer.write_all(&chunk).map_err(Error::Streaming)?;
@@ -193,23 +200,67 @@ pub(crate) async fn download_file(
     Ok(())
 }
 
-pub(crate) fn decompress_archive(
-    archive: &File,
-    dest_dir: &Path,
-    display_progress: bool,
+pub(crate) async fn decompress_archive(
+    archive_path: PathBuf,
+    dest_dir: PathBuf,
+    progress_mgr: Option<MultiProgress>,
 ) -> Result<(), Error> {
-    let progress = if !display_progress {
-        ProgressBar::hidden()
-    } else {
-        ProgressBar::no_length()
-    };
-    progress.set_message("Decompressing repo...");
-    let reader = progress.wrap_read(archive);
-    // TODO: this assumes this will always be a tarball
-    let gz = GzDecoder::new(reader);
-    let mut archive = Archive::new(gz);
-    archive
-        .unpack(dest_dir)
-        .map_err(|e| Error::Decompression(e))?;
-    Ok(())
+    task::spawn_blocking(move || {
+        let mut file = File::open(&archive_path).map_err(Error::from)?;
+        // Detect format (GZIP vs ZIP)
+        let mut magic = [0u8; 2];
+        let _ = file.read_exact(&mut magic);
+        // Rewind back to start
+        file.seek(SeekFrom::Start(0)).map_err(Error::from)?;
+
+        let progress = match &progress_mgr {
+            Some(mp) => mp.add(ProgressBar::no_length()),
+            None => ProgressBar::hidden(),
+        };
+        let reader = progress.wrap_read(file);
+
+        match magic {
+            [0x1F, 0x8B] => {
+                // Gzip Magic Number -> Process as Tarball (.tar.gz)
+                progress.set_message("Decompressing Tarball...");
+                let gz = flate2::read::GzDecoder::new(reader);
+                let mut archive = tar::Archive::new(gz);
+                archive.unpack(&dest_dir).map_err(|e| Error::Tar(e))?;
+            }
+            [0x50, 0x4B] => {
+                // PK Zip Magic Number -> Process as Zipfile (.zip)
+                progress.set_message("Extracting Zip Archive...");
+                let mut archive = ZipArchive::new(reader)?;
+                for i in 0..archive.len() {
+                    let mut file = archive.by_index(i)?;
+                    let outpath = match file.enclosed_name() {
+                        Some(path) => dest_dir.join(path),
+                        None => continue, // Skip suspicious/malformed traversal paths
+                    };
+
+                    if file.is_dir() {
+                        std::fs::create_dir_all(&outpath)?;
+                    } else {
+                        if let Some(p) = outpath.parent() {
+                            std::fs::create_dir_all(p)?;
+                        }
+                        let mut outfile = std::fs::File::create(&outpath)?;
+                        std::io::copy(&mut file, &mut outfile)?;
+                    }
+                }
+            }
+            _ => {
+                return Err(Error::UnsupportedArchive {
+                    ext: archive_path
+                        .extension()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string(),
+                });
+            }
+        }
+        progress.finish_with_message("Decompression complete!");
+        Ok(())
+    })
+    .await? // Catch thread panics safely
 }

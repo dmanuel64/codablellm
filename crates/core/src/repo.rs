@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::LazyLock};
 use thiserror::Error;
 use url::Url;
 
-use crate::{FileSource, language::Language, storage};
+use crate::{Location, language::Language, storage};
 
 pub static REPOS_ROOT: LazyLock<PathBuf> = LazyLock::new(|| storage::CACHE_DIR.join("repos"));
 
@@ -31,18 +31,24 @@ impl Repository {
 }
 
 #[derive(Debug, Clone)]
+pub enum Kind {
+    Direct,
+    #[cfg(feature = "git")]
+    Git,
+}
+
+#[derive(Debug, Clone)]
 pub struct Source {
     pub metadata: Metadata,
-    pub path: FileSource,
+    pub location: Location,
+    pub kind: Kind,
 }
 
 impl Source {
     pub fn dest_path(&self) -> PathBuf {
-        let slug_dirname = match &self.path {
-            FileSource::Local(_) => "local",
-            FileSource::Remote(remote) => {
-                &remote.url.host_str().unwrap_or("unknown").replace(".", "-")
-            }
+        let slug_dirname = match &self.location {
+            Location::Path(_) => "local",
+            Location::Url(url) => &url.host_str().unwrap_or("unknown").replace(".", "-"),
         };
         let repo_dirname = format!(
             "{}-{}-{}",

@@ -44,9 +44,11 @@ tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-typescript = "0.23"
 polars = "0.54"
-fs_extra = "1"
 
-gix = { version = "0.85", optional = true }
+gix = { version = "0.86", optional = true, features = [
+    "blocking-network-client",
+] }
+tokio = { workspace = true }
 clap = { version = "4", optional = true, default-features = false, features = [
     "std",
     "derive",
@@ -55,6 +57,7 @@ rhai = { version = "1", optional = true }
 starlark = { version = "0.14", optional = true }
 mlua = { version = "0.12", features = ["vendored", "luau"], optional = true }
 reqwest = { version = "0.13", features = ["stream"] }
+zip = "8"
 
 [features]
 full = ["scripting", "git"]

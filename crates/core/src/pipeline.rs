@@ -6,7 +6,7 @@ use thiserror::Error;
 use tracing::instrument;
 
 use crate::{
-    FileSource, builder,
+    Location, builder,
     dataset::{self, Dataset},
     decompiler, extractor,
     function::Function,

@@ -2,7 +2,7 @@ use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, sync::OnceLock};
 
 use clap::{Args, ValueEnum};
 use codablellm_core::{
-    BinaryMode, Dataset, FileSource, Language, Mode, Options, RepoMetadata, RepoSource, dataset,
+    BinaryMode, Dataset, Language, Location, Mode, Options, RepoMetadata, RepoSource, dataset,
     decompiler, extractor, mapper, repo,
 };
 use color_eyre::eyre::Result;
@@ -23,8 +23,7 @@ const DECOMPILER_OPTS_HEADING: &str = "Decompiler Options";
 const DATASET_OPTS_HEADING: &str = "Dataset Options";
 
 fn infer_metadata(val: &str) -> Result<Option<RepoMetadata>> {
-    if let FileSource::Remote(f) = FileSource::from_str(val)? {
-        let url = f.url;
+    if let Location::Url(url) = Location::from_str(val)? {
         let metadata = if let Some(m) = RepoMetadata::from_gitlab(&url) {
             Some(m)
         } else if let Some(m) = RepoMetadata::from_gitlab(&url) {
@@ -46,7 +45,7 @@ pub struct CreateDatasetArgs {
     name: Option<String>,
 
     /// The path or url to the repository
-    repo: Option<FileSource>,
+    repo: Option<Location>,
 
     /// The type of the code forge if REPO is a URL
     ///
@@ -342,7 +341,7 @@ pub enum RepresentationChoice {
 #[derive(Debug)]
 pub struct ResolvedCreateDatasetArgs {
     name: String,
-    repo: FileSource,
+    repo: Location,
     forge: Option<ForgeChoice>,
     token: Option<String>,
     insecure: bool,
@@ -426,7 +425,8 @@ pub async fn create_dataset(
     };
     let source = RepoSource {
         metadata,
-        path: repo,
+        location: repo,
+        kind: todo!(),
     };
 
     let dataset = codablellm_core::run_with_options(

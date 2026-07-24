@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod builder;
+pub(crate) mod container;
 pub mod dataset;
 pub mod decompiler;
 pub mod extractor;
@@ -16,4 +17,4 @@ pub use language::Language;
 pub use pipeline::Error as CodablellmError;
 pub use pipeline::{BinaryMode, Mode, Options, run, run_with_options};
 pub use repo::{Metadata as RepoMetadata, Source as RepoSource};
-pub use storage::FileSource;
+pub use storage::Location;
