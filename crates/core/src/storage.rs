@@ -1,18 +1,17 @@
 use directories::ProjectDirs;
-use indicatif::{MultiProgress, ProgressBar};
 use reqwest::Client;
 use std::{
-    fmt::Display,
     fs::File,
     io::{self, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    str::FromStr,
     sync::LazyLock,
 };
 use thiserror::Error;
 use tokio::{fs, task};
 use url::Url;
 use zip::{ZipArchive, result::ZipError};
+
+use crate::utils::ProgressDisplay;
 
 static DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
     ProjectDirs::from("io.github", "dmanuel64", "codablellm")
@@ -137,17 +136,15 @@ pub struct RequestOptions {}
 pub(crate) async fn download_file(
     url: &Url,
     dest: &File,
-    display_progress: bool,
+    progress_display: ProgressDisplay,
 ) -> Result<(), Error> {
     // Get size of the remote archive
     let head_response = HTTP_CLIENT.head(url.as_str()).send().await?;
     let repo_size = head_response.content_length();
-    let progress = if !display_progress {
-        ProgressBar::hidden()
-    } else if let Some(s) = repo_size {
-        ProgressBar::new(s)
+    let progress = if let Some(s) = repo_size {
+        progress_display.new_progress_bar(Some(s))
     } else {
-        ProgressBar::new_spinner()
+        progress_display.new_spinner()
     };
     // Fetch archive and stream to temporary archive
     progress.set_message("Fetching repo...");
@@ -162,7 +159,7 @@ pub(crate) async fn download_file(
 pub(crate) async fn decompress_archive(
     archive_path: PathBuf,
     dest_dir: PathBuf,
-    progress_mgr: Option<MultiProgress>,
+    progress_display: ProgressDisplay,
 ) -> Result<(), Error> {
     task::spawn_blocking(move || {
         let mut file = File::open(&archive_path).map_err(Error::from)?;
@@ -172,10 +169,7 @@ pub(crate) async fn decompress_archive(
         // Rewind back to start
         file.seek(SeekFrom::Start(0)).map_err(Error::from)?;
 
-        let progress = match &progress_mgr {
-            Some(mp) => mp.add(ProgressBar::no_length()),
-            None => ProgressBar::hidden(),
-        };
+        let progress = progress_display.new_progress_bar(None);
         let reader = progress.wrap_read(file);
 
         match magic {

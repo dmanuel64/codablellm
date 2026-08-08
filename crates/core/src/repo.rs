@@ -3,7 +3,7 @@ use std::{fmt::Display, path::PathBuf, str::FromStr, sync::LazyLock};
 use thiserror::Error;
 use url::Url;
 
-use crate::{language::Language, storage};
+use crate::{language::Language, storage, utils::ProgressDisplay};
 
 pub static REPOS_ROOT: LazyLock<PathBuf> = LazyLock::new(|| storage::CACHE_DIR.join("repos"));
 
@@ -190,19 +190,43 @@ pub enum Kind {
     Git,
 }
 
-#[derive(Debug)]
+impl Kind {
+    /// Infers the fetch strategy from a [`Location`]: a `git://` scheme or a
+    /// `.git`-suffixed URL path is treated as git-like, as is a local path
+    /// containing a `.git` directory. Everything else is a direct download.
+    pub fn from_location(location: &Location) -> Self {
+        match location {
+            Location::Url(url) => {
+                #[cfg(feature = "git")]
+                if url.scheme() == "git" || url.path().ends_with(".git") {
+                    return Kind::Git;
+                }
+                Kind::Direct
+            }
+            Location::Path(path) => {
+                #[cfg(feature = "git")]
+                if path.join(".git").is_dir() {
+                    return Kind::Git;
+                }
+                Kind::Direct
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Options {
     pub kind: Option<Kind>,
-    pub display_progress: bool,
-    pub request_builder: Option<reqwest::ClientBuilder>,
+    pub progress_display: ProgressDisplay,
+    // pub request_builder: Option<reqwest::ClientBuilder>,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
             kind: None,
-            display_progress: true,
-            request_builder: None,
+            progress_display: ProgressDisplay::default(),
+            // request_builder: None,
         }
     }
 }
@@ -212,7 +236,7 @@ fn clone(url: &Url) -> Result<Repository, Error> {
 }
 
 pub fn fetch(location: Location, metadata: Metadata) -> Result<Repository, Error> {
-    fetch_with_options(location, metadata, &Options::default())
+    fetch_with_options(location, metadata, Options::default())
 }
 
 pub fn fetch_with_options(
@@ -220,9 +244,19 @@ pub fn fetch_with_options(
     metadata: Metadata,
     Options {
         kind,
-        display_progress,
-        request_builder,
-    }: &Options,
+        progress_display: display_progress,
+        // request_builder,
+    }: Options,
 ) -> Result<Repository, Error> {
-    todo!()
+    let kind = kind.unwrap_or_else(|| Kind::from_location(&location));
+    match location {
+        Location::Path(path) => match kind {
+            Kind::Direct => todo!(),
+            Kind::Git => todo!(),
+        },
+        Location::Url(url) => match kind {
+            Kind::Direct => todo!(),
+            Kind::Git => todo!(),
+        },
+    }
 }

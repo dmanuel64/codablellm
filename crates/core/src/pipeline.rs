@@ -38,7 +38,12 @@ struct Manager {
 }
 
 impl Manager {
-    pub fn new(source: repo::Location, metadata: repo::Metadata, mode: Mode, options: Options) -> Self {
+    pub fn new(
+        source: repo::Location,
+        metadata: repo::Metadata,
+        mode: Mode,
+        options: Options,
+    ) -> Self {
         let progress = if options.display_progress {
             ProgressBar::no_length()
         } else {
@@ -81,7 +86,7 @@ impl Manager {
                 self.repo = Some(repo::fetch_with_options(
                     self.source.clone(),
                     self.metadata.clone(),
-                    &self.options.repo_options,
+                    self.options.repo_options.clone(),
                 )?);
             }
             Stage::ExtractSourceCode => {

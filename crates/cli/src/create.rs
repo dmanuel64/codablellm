@@ -431,10 +431,7 @@ pub async fn create_dataset(
         Options {
             display_progress,
             dry_run,
-            repo_options: repo::Options {
-                display_progress,
-                ..Default::default()
-            },
+            repo_options: repo::Options::default(),
             extractor_options: extractor::Options { display_progress },
             decompiler_options: decompiler::Options { display_progress },
             mapper_options: mapper::Options { display_progress },
