@@ -6,7 +6,7 @@ use std::{
 use polars::prelude::*;
 use thiserror::Error;
 
-use crate::{Location, function::Function, storage};
+use crate::{function::Function, storage};
 
 #[derive(Debug, Error)]
 pub enum Error {

@@ -1,9 +1,9 @@
 use glob::glob;
-use std::{path::PathBuf, sync::LazyLock};
+use std::{fmt::Display, path::PathBuf, str::FromStr, sync::LazyLock};
 use thiserror::Error;
 use url::Url;
 
-use crate::{Location, language::Language, storage};
+use crate::{language::Language, storage};
 
 pub static REPOS_ROOT: LazyLock<PathBuf> = LazyLock::new(|| storage::CACHE_DIR.join("repos"));
 
@@ -11,11 +11,13 @@ pub static REPOS_ROOT: LazyLock<PathBuf> = LazyLock::new(|| storage::CACHE_DIR.j
 pub enum Error {
     #[error("failed to decompress repository")]
     Storage(#[from] storage::Error),
+    #[error("unsupported URL scheme")]
+    UnsupportedScheme,
 }
 
 pub struct Repository {
     pub path: PathBuf,
-    pub source: Source,
+    pub source: Location,
     pub languages: Vec<Language>,
 }
 
@@ -31,37 +33,41 @@ impl Repository {
 }
 
 #[derive(Debug, Clone)]
-pub enum Kind {
-    Direct,
-    #[cfg(feature = "git")]
-    Git,
+pub enum Location {
+    Path(PathBuf),
+    Url(Url),
 }
 
-#[derive(Debug, Clone)]
-pub struct Source {
-    pub metadata: Metadata,
-    pub location: Location,
-    pub kind: Kind,
+impl FromStr for Location {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match Url::parse(s) {
+            Ok(url) if matches!(url.scheme(), "http" | "https") => Ok(Location::Url(url)),
+            // single letter scheme = Windows drive path (C:\...)
+            Ok(url) if url.scheme().len() == 1 => Ok(Location::Path(PathBuf::from(s))),
+            // file:// -> honor it as local
+            Ok(url) if url.scheme() == "file" => url
+                .to_file_path()
+                .map(Location::Path)
+                .map_err(|_| Error::UnsupportedScheme),
+            // some other scheme we don't handle (ssh://, git://...) → explicit error
+            Ok(_) => Err(Error::UnsupportedScheme),
+            Err(_) => Ok(Location::Path(PathBuf::from(s))),
+        }
+    }
 }
 
-impl Source {
-    pub fn dest_path(&self) -> PathBuf {
-        let slug_dirname = match &self.location {
-            Location::Path(_) => "local",
-            Location::Url(url) => &url.host_str().unwrap_or("unknown").replace(".", "-"),
-        };
-        let repo_dirname = format!(
-            "{}-{}-{}",
-            self.metadata.owner,
-            self.metadata.name,
-            self.metadata
-                .git_ref
-                .as_ref()
-                .map(String::as_str)
-                .unwrap_or("unknown")
+impl Display for Location {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Location::Path(path_buf) => path_buf.display().to_string(),
+                Location::Url(remote_file) => remote_file.to_string(),
+            }
         )
-        .replace(".", "-");
-        REPOS_ROOT.join(slug_dirname).join(repo_dirname)
     }
 }
 
@@ -177,8 +183,16 @@ impl Metadata {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum Kind {
+    Direct,
+    #[cfg(feature = "git")]
+    Git,
+}
+
 #[derive(Debug)]
 pub struct Options {
+    pub kind: Option<Kind>,
     pub display_progress: bool,
     pub request_builder: Option<reqwest::ClientBuilder>,
 }
@@ -186,6 +200,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
+            kind: None,
             display_progress: true,
             request_builder: None,
         }
@@ -196,13 +211,15 @@ fn clone(url: &Url) -> Result<Repository, Error> {
     todo!()
 }
 
-pub fn fetch(source: Source) -> Result<Repository, Error> {
-    fetch_with_options(source, &Options::default())
+pub fn fetch(location: Location, metadata: Metadata) -> Result<Repository, Error> {
+    fetch_with_options(location, metadata, &Options::default())
 }
 
 pub fn fetch_with_options(
-    source: Source,
+    location: Location,
+    metadata: Metadata,
     Options {
+        kind,
         display_progress,
         request_builder,
     }: &Options,

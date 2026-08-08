@@ -2,8 +2,8 @@ use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, sync::OnceLock};
 
 use clap::{Args, ValueEnum};
 use codablellm_core::{
-    BinaryMode, Dataset, Language, Location, Mode, Options, RepoMetadata, RepoSource, dataset,
-    decompiler, extractor, mapper, repo,
+    BinaryMode, Dataset, Language, Mode, Options, RepoLocation, RepoMetadata, dataset, decompiler,
+    extractor, mapper, repo,
 };
 use color_eyre::eyre::Result;
 use inquire::required;
@@ -23,8 +23,8 @@ const DECOMPILER_OPTS_HEADING: &str = "Decompiler Options";
 const DATASET_OPTS_HEADING: &str = "Dataset Options";
 
 fn infer_metadata(val: &str) -> Result<Option<RepoMetadata>> {
-    if let Location::Url(url) = Location::from_str(val)? {
-        let metadata = if let Some(m) = RepoMetadata::from_gitlab(&url) {
+    if let RepoLocation::Url(url) = RepoLocation::from_str(val)? {
+        let metadata = if let Some(m) = RepoMetadata::from_github(&url) {
             Some(m)
         } else if let Some(m) = RepoMetadata::from_gitlab(&url) {
             Some(m)
@@ -45,7 +45,7 @@ pub struct CreateDatasetArgs {
     name: Option<String>,
 
     /// The path or url to the repository
-    repo: Option<Location>,
+    repo: Option<RepoLocation>,
 
     /// The type of the code forge if REPO is a URL
     ///
@@ -341,7 +341,7 @@ pub enum RepresentationChoice {
 #[derive(Debug)]
 pub struct ResolvedCreateDatasetArgs {
     name: String,
-    repo: Location,
+    repo: RepoLocation,
     forge: Option<ForgeChoice>,
     token: Option<String>,
     insecure: bool,
@@ -423,14 +423,9 @@ pub async fn create_dataset(
     } else {
         return Err(user_error("--owner <REPO_OWNER> and --name <REPO_NAME> are required when using local repositories or non-standard forges").into());
     };
-    let source = RepoSource {
-        metadata,
-        location: repo,
-        kind: todo!(),
-    };
-
     let dataset = codablellm_core::run_with_options(
-        source,
+        repo,
+        metadata,
         mode,
         Options {
             display_progress,

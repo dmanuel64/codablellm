@@ -16,5 +16,4 @@ pub use dataset::{BinaryDataset, Dataset, SourceDataset};
 pub use language::Language;
 pub use pipeline::Error as CodablellmError;
 pub use pipeline::{BinaryMode, Mode, Options, run, run_with_options};
-pub use repo::{Metadata as RepoMetadata, Source as RepoSource};
-pub use storage::Location;
+pub use repo::{Location as RepoLocation, Metadata as RepoMetadata};

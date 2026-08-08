@@ -37,8 +37,6 @@ pub enum Error {
     DataExists { kind: &'static str, name: String },
     #[error("{kind} \"{name}\": {kind} does not exist")]
     DataNotFound { kind: &'static str, name: String },
-    #[error("unsupported URL scheme")]
-    UnsupportedScheme,
     #[error("failed to fetch data: {0}")]
     Fetch(#[from] reqwest::Error),
     #[error("failed to stream data")]
@@ -135,45 +133,6 @@ async fn copy_dir_contents(src: &Path, dest: &Path, force: bool) -> Result<(), E
 
 #[derive(Debug, Clone, Default)]
 pub struct RequestOptions {}
-
-#[derive(Debug, Clone)]
-pub enum Location {
-    Path(PathBuf),
-    Url(Url),
-}
-
-impl FromStr for Location {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match Url::parse(s) {
-            Ok(url) if matches!(url.scheme(), "http" | "https") => Ok(Location::Url(url)),
-            // single letter scheme = Windows drive path (C:\...)
-            Ok(url) if url.scheme().len() == 1 => Ok(Location::Path(PathBuf::from(s))),
-            // file:// -> honor it as local
-            Ok(url) if url.scheme() == "file" => url
-                .to_file_path()
-                .map(Location::Path)
-                .map_err(|_| Error::UnsupportedScheme),
-            // some other scheme we don't handle (ssh://, git://...) → explicit error
-            Ok(_) => Err(Error::UnsupportedScheme),
-            Err(_) => Ok(Location::Path(PathBuf::from(s))),
-        }
-    }
-}
-
-impl Display for Location {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Location::Path(path_buf) => path_buf.display().to_string(),
-                Location::Url(remote_file) => remote_file.to_string(),
-            }
-        )
-    }
-}
 
 pub(crate) async fn download_file(
     url: &Url,

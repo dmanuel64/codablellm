@@ -6,7 +6,7 @@ use thiserror::Error;
 use tracing::instrument;
 
 use crate::{
-    Location, builder,
+    builder,
     dataset::{self, Dataset},
     decompiler, extractor,
     function::Function,
@@ -28,7 +28,8 @@ pub enum Error {
 }
 
 struct Manager {
-    source: repo::Source,
+    source: repo::Location,
+    metadata: repo::Metadata,
     mode: Mode,
     progress: ProgressBar,
     options: Options,
@@ -37,7 +38,7 @@ struct Manager {
 }
 
 impl Manager {
-    pub fn new(source: repo::Source, mode: Mode, options: Options) -> Self {
+    pub fn new(source: repo::Location, metadata: repo::Metadata, mode: Mode, options: Options) -> Self {
         let progress = if options.display_progress {
             ProgressBar::no_length()
         } else {
@@ -46,6 +47,7 @@ impl Manager {
 
         Self {
             source,
+            metadata,
             mode,
             progress,
             options,
@@ -78,6 +80,7 @@ impl Manager {
             Stage::Pulling => {
                 self.repo = Some(repo::fetch_with_options(
                     self.source.clone(),
+                    self.metadata.clone(),
                     &self.options.repo_options,
                 )?);
             }
@@ -192,16 +195,21 @@ impl Default for Options {
     }
 }
 
-pub async fn run(source: repo::Source, mode: Mode) -> Result<dataset::Dataset, Error> {
-    run_with_options(source, mode, Options::default()).await
+pub async fn run(
+    source: repo::Location,
+    metadata: repo::Metadata,
+    mode: Mode,
+) -> Result<dataset::Dataset, Error> {
+    run_with_options(source, metadata, mode, Options::default()).await
 }
 
 #[instrument(name = "pipeline", skip(options))]
 pub async fn run_with_options(
-    source: repo::Source,
+    source: repo::Location,
+    metadata: repo::Metadata,
     mode: Mode,
     options: Options,
 ) -> Result<dataset::Dataset, Error> {
     tracing::trace!(?options);
-    Manager::new(source, mode, options).run().await
+    Manager::new(source, metadata, mode, options).run().await
 }
