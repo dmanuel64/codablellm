@@ -43,7 +43,7 @@ tree-sitter-javascript = "0.25"
 tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-typescript = "0.23"
-polars = "0.54"
+polars = "0.55"
 
 gix = { version = "0.86", optional = true, features = [
     "blocking-network-client",
@@ -61,7 +61,5 @@ zip = "8"
 full = ["rhai", "git"]
 
 value-enums = ["dep:clap"]
-
 git = ["dep:gix"]
-
 rhai = ["dep:rhai"]
