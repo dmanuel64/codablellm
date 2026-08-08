@@ -54,19 +54,14 @@ clap = { version = "4", optional = true, default-features = false, features = [
     "derive",
 ] }
 rhai = { version = "1", optional = true }
-starlark = { version = "0.14", optional = true }
-mlua = { version = "0.12", features = ["vendored", "luau"], optional = true }
 reqwest = { version = "0.13", features = ["stream"] }
 zip = "8"
 
 [features]
-full = ["scripting", "git"]
-scripting = ["rhai", "lua", "starlark"]
+full = ["rhai", "git"]
 
 value-enums = ["dep:clap"]
 
 git = ["dep:gix"]
 
 rhai = ["dep:rhai"]
-lua = ["dep:mlua"]
-starlark = ["dep:starlark"]

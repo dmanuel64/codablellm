@@ -75,7 +75,8 @@ pub struct CreateDatasetArgs {
         long,
         num_args = 0..,
         value_delimiter = ',',
-        alias = "binary",
+        aliases = ["binary", "bin"],
+        visible_alias = "bins",
         requires = "build_commands",
     )]
     binaries: Vec<PathBuf>,
