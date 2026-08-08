@@ -83,11 +83,14 @@ impl Manager {
     async fn process(&mut self, stage: &Stage) -> Result<(), Error> {
         match stage {
             Stage::Pulling => {
-                self.repo = Some(repo::fetch_with_options(
-                    self.source.clone(),
-                    self.metadata.clone(),
-                    self.options.repo_options.clone(),
-                )?);
+                self.repo = Some(
+                    repo::fetch_with_options(
+                        self.source.clone(),
+                        self.metadata.clone(),
+                        self.options.repo_options.clone(),
+                    )
+                    .await?,
+                );
             }
             Stage::ExtractSourceCode => {
                 self.extracted_functions = extractor::extract_with_options(

@@ -1,6 +1,8 @@
 use glob::glob;
 use std::{fmt::Display, path::PathBuf, str::FromStr, sync::LazyLock};
+use tempfile::NamedTempFile;
 use thiserror::Error;
+use tokio::fs;
 use url::Url;
 
 use crate::{language::Language, storage, utils::ProgressDisplay};
@@ -29,6 +31,36 @@ impl Repository {
             paths.extend(glob(&pattern).expect("glob pattern to be valid").flatten());
         }
         paths
+    }
+}
+
+fn dest_path(
+    forge: Option<&str>,
+    kind: &Kind,
+    Metadata {
+        owner,
+        name,
+        git_ref,
+    }: &Metadata,
+) -> PathBuf {
+    let forge = forge
+        .map(|f| f.replace(".", "-"))
+        .unwrap_or_else(|| "local".to_string());
+    let kind_dirname = match kind {
+        Kind::Direct => "direct",
+        Kind::Git => "git",
+    };
+    let path = REPOS_ROOT
+        .join(forge)
+        .join(kind_dirname)
+        .join(owner)
+        .join(name);
+    match kind {
+        Kind::Direct => match git_ref {
+            Some(tag) => path.join(tag),
+            None => path.join("unknown"),
+        },
+        Kind::Git => path,
     }
 }
 
@@ -190,12 +222,9 @@ pub enum Kind {
     Git,
 }
 
-impl Kind {
-    /// Infers the fetch strategy from a [`Location`]: a `git://` scheme or a
-    /// `.git`-suffixed URL path is treated as git-like, as is a local path
-    /// containing a `.git` directory. Everything else is a direct download.
-    pub fn from_location(location: &Location) -> Self {
-        match location {
+impl From<&Location> for Kind {
+    fn from(value: &Location) -> Self {
+        match value {
             Location::Url(url) => {
                 #[cfg(feature = "git")]
                 if url.scheme() == "git" || url.path().ends_with(".git") {
@@ -218,6 +247,7 @@ impl Kind {
 pub struct Options {
     pub kind: Option<Kind>,
     pub progress_display: ProgressDisplay,
+    pub force: bool,
     // pub request_builder: Option<reqwest::ClientBuilder>,
 }
 
@@ -226,6 +256,7 @@ impl Default for Options {
         Self {
             kind: None,
             progress_display: ProgressDisplay::default(),
+            force: false,
             // request_builder: None,
         }
     }
@@ -235,28 +266,54 @@ fn clone(url: &Url) -> Result<Repository, Error> {
     todo!()
 }
 
-pub fn fetch(location: Location, metadata: Metadata) -> Result<Repository, Error> {
-    fetch_with_options(location, metadata, Options::default())
+pub async fn fetch(location: Location, metadata: Metadata) -> Result<Repository, Error> {
+    fetch_with_options(location, metadata, Options::default()).await
 }
 
-pub fn fetch_with_options(
+pub async fn fetch_with_options(
     location: Location,
     metadata: Metadata,
     Options {
         kind,
-        progress_display: display_progress,
+        progress_display,
+        force,
         // request_builder,
     }: Options,
 ) -> Result<Repository, Error> {
-    let kind = kind.unwrap_or_else(|| Kind::from_location(&location));
-    match location {
-        Location::Path(path) => match kind {
-            Kind::Direct => todo!(),
-            Kind::Git => todo!(),
-        },
-        Location::Url(url) => match kind {
-            Kind::Direct => todo!(),
-            Kind::Git => todo!(),
-        },
+    let kind = kind.unwrap_or_else(|| Kind::from(&location));
+    let forge = match &location {
+        Location::Path(_) => None,
+        Location::Url(url) => Some(url.host_str().unwrap_or("unknown")),
+    };
+    let dest = dest_path(forge, &kind, &metadata);
+    // Skip the fetch entirely when we already have this exact repo/kind/ref
+    // cached at `dest`, unless the caller asked to re-fetch.
+    let up_to_date = !force && fs::try_exists(&dest).await.unwrap_or(false);
+
+    if !up_to_date {
+        match &location {
+            Location::Path(path) => storage::copy_data("repository", path, &dest, force).await?,
+            Location::Url(url) => match kind {
+                Kind::Direct => {
+                    storage::ensure_dir_exists(&dest).await?;
+                    let archive = NamedTempFile::new().map_err(storage::Error::Io)?;
+                    storage::download_file(url, archive.as_file(), progress_display.clone())
+                        .await?;
+                    storage::decompress_archive(
+                        archive.path().to_path_buf(),
+                        dest.clone(),
+                        progress_display.clone(),
+                    )
+                    .await?;
+                }
+                Kind::Git => todo!("clone {url} into {}", dest.display()),
+            },
+        }
     }
+
+    Ok(Repository {
+        path: dest,
+        source: location,
+        languages: Vec::new(), // TODO: detect languages present in the repo
+    })
 }
