@@ -413,6 +413,15 @@ pub async fn create_dataset(
             decompilers: vec!["Ghidra"].iter().map(ToString::to_string).collect(),
         })
     };
+    if let Some(output) = &output {
+        if !force && output.exists() {
+            return Err(user_error(format!(
+                "{} already exists; pass --force/--overwrite to replace it",
+                output.display()
+            ))
+            .into());
+        }
+    }
     let metadata = if let (Some(owner), Some(name), git_ref) = (repo_owner, repo_name, git_ref) {
         RepoMetadata {
             owner,
@@ -431,7 +440,10 @@ pub async fn create_dataset(
         Options {
             display_progress,
             dry_run,
-            repo_options: repo::Options::default(),
+            repo_options: repo::Options {
+                force,
+                ..repo::Options::default()
+            },
             extractor_options: extractor::Options { display_progress },
             decompiler_options: decompiler::Options { display_progress },
             mapper_options: mapper::Options { display_progress },
