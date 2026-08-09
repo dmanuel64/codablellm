@@ -120,6 +120,24 @@ pub struct CreateDatasetArgs {
     #[arg(short, long, visible_alias = "overwrite")]
     force: bool,
 
+    /// Re-fetch the repository from scratch, overwriting any cached copy
+    ///
+    /// Unlike --force, this only affects the repository download/clone
+    /// step, not the rest of the dataset creation process.
+    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long, conflicts_with = "force")]
+    force_download: bool,
+
+    /// If the cached repository is a git clone, fetch and fast-forward it
+    ///
+    /// A no-op if the cached copy is already up to date or isn't a git
+    /// clone at all.
+    #[arg(
+        help_heading = REPOSITORY_OPTS_HEADING,
+        long,
+        conflicts_with_all = ["force", "force_download"]
+    )]
+    pull: bool,
+
     #[arg(short, long, visible_alias = "out")]
     output: Option<PathBuf>,
 
@@ -183,6 +201,8 @@ impl IntoResolved for CreateDatasetArgs {
             ca_cert,
             representations,
             force,
+            force_download,
+            pull,
             output,
             git_ref,
             repo_owner,
@@ -293,6 +313,8 @@ impl IntoResolved for CreateDatasetArgs {
             strip,
             representations,
             force,
+            force_download,
+            pull,
             output,
             git_ref,
             repo_owner,
@@ -353,6 +375,8 @@ pub struct ResolvedCreateDatasetArgs {
     strip: bool,
     representations: Vec<RepresentationChoice>,
     force: bool,
+    force_download: bool,
+    pull: bool,
     output: Option<PathBuf>,
     git_ref: Option<String>,
     repo_owner: Option<String>,
@@ -385,6 +409,8 @@ pub async fn create_dataset(
         strip,
         representations,
         force,
+        force_download,
+        pull,
         output,
         git_ref,
         repo_owner,
@@ -433,6 +459,13 @@ pub async fn create_dataset(
     } else {
         return Err(user_error("--owner <REPO_OWNER> and --name <REPO_NAME> are required when using local repositories or non-standard forges").into());
     };
+    let refresh_mode = if force || force_download {
+        Some(repo::RefreshMode::ForceDownload)
+    } else if pull {
+        Some(repo::RefreshMode::Pull)
+    } else {
+        None
+    };
     let dataset = codablellm_core::run_with_options(
         repo,
         metadata,
@@ -441,7 +474,7 @@ pub async fn create_dataset(
             display_progress,
             dry_run,
             repo_options: repo::Options {
-                force,
+                force: refresh_mode,
                 ..repo::Options::default()
             },
             extractor_options: extractor::Options { display_progress },
