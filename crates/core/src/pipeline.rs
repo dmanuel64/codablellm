@@ -28,8 +28,7 @@ pub enum Error {
 }
 
 struct Manager {
-    source: repo::Location,
-    metadata: repo::Metadata,
+    path: PathBuf,
     mode: Mode,
     progress: ProgressBar,
     options: Options,
@@ -38,12 +37,7 @@ struct Manager {
 }
 
 impl Manager {
-    pub fn new(
-        source: repo::Location,
-        metadata: repo::Metadata,
-        mode: Mode,
-        options: Options,
-    ) -> Self {
+    pub fn new(path: PathBuf, mode: Mode, options: Options) -> Self {
         let progress = if options.display_progress {
             ProgressBar::no_length()
         } else {
@@ -51,8 +45,7 @@ impl Manager {
         };
 
         Self {
-            source,
-            metadata,
+            path,
             mode,
             progress,
             options,
@@ -82,15 +75,8 @@ impl Manager {
 
     async fn process(&mut self, stage: &Stage) -> Result<(), Error> {
         match stage {
-            Stage::Pulling => {
-                self.repo = Some(
-                    repo::fetch_with_options(
-                        self.source.clone(),
-                        self.metadata.clone(),
-                        self.options.repo_options.clone(),
-                    )
-                    .await?,
-                );
+            Stage::Loading => {
+                self.repo = Some(repo::load(self.path.clone())?);
             }
             Stage::ExtractSourceCode => {
                 self.extracted_functions = extractor::extract_with_options(
@@ -133,7 +119,7 @@ impl Manager {
 #[derive(Debug, Copy, Clone, Display, Default, EnumCount, EnumIter)]
 pub enum Stage {
     #[default]
-    Pulling,
+    Loading,
     ExtractSourceCode,
     SetupBuilder,
     BuildCode,
@@ -182,7 +168,6 @@ impl Mode {
 pub struct Options {
     pub display_progress: bool,
     pub dry_run: bool,
-    pub repo_options: repo::Options,
     pub extractor_options: extractor::Options,
     pub decompiler_options: decompiler::Options,
     pub mapper_options: mapper::Options,
@@ -194,7 +179,6 @@ impl Default for Options {
         Self {
             display_progress: true,
             dry_run: false,
-            repo_options: repo::Options::default(),
             extractor_options: extractor::Options::default(),
             decompiler_options: decompiler::Options::default(),
             mapper_options: mapper::Options::default(),
@@ -203,21 +187,16 @@ impl Default for Options {
     }
 }
 
-pub async fn run(
-    source: repo::Location,
-    metadata: repo::Metadata,
-    mode: Mode,
-) -> Result<dataset::Dataset, Error> {
-    run_with_options(source, metadata, mode, Options::default()).await
+pub async fn run(path: PathBuf, mode: Mode) -> Result<dataset::Dataset, Error> {
+    run_with_options(path, mode, Options::default()).await
 }
 
 #[instrument(name = "pipeline", skip(options))]
 pub async fn run_with_options(
-    source: repo::Location,
-    metadata: repo::Metadata,
+    path: PathBuf,
     mode: Mode,
     options: Options,
 ) -> Result<dataset::Dataset, Error> {
     tracing::trace!(?options);
-    Manager::new(source, metadata, mode, options).run().await
+    Manager::new(path, mode, options).run().await
 }

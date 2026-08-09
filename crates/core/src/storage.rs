@@ -1,17 +1,10 @@
 use directories::ProjectDirs;
-use reqwest::Client;
 use std::{
-    fs::File,
-    io::{self, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::LazyLock,
 };
 use thiserror::Error;
-use tokio::{fs, task};
-use url::Url;
-use zip::{ZipArchive, result::ZipError};
-
-use crate::utils::ProgressDisplay;
+use tokio::fs;
 
 static DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
     ProjectDirs::from("io.github", "dmanuel64", "codablellm")
@@ -26,8 +19,6 @@ pub static STATE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
         .unwrap_or_else(|| DATA_DIR.join("state"))
 });
 
-static HTTP_CLIENT: LazyLock<Client> = LazyLock::new(|| Client::new());
-
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("{0}")]
@@ -36,16 +27,6 @@ pub enum Error {
     DataExists { kind: &'static str, name: String },
     #[error("{kind} \"{name}\": {kind} does not exist")]
     DataNotFound { kind: &'static str, name: String },
-    #[error("failed to fetch data: {0}")]
-    Fetch(#[from] reqwest::Error),
-    #[error("failed to stream data")]
-    Streaming(#[source] io::Error),
-    #[error("failed to decompress tarball")]
-    Tar(#[source] io::Error),
-    #[error("failed to decompress zipfile")]
-    Zip(#[from] ZipError),
-    #[error("unsupported archive type: {ext}")]
-    UnsupportedArchive { ext: String },
     #[error(transparent)]
     TokioBlocking(#[from] tokio::task::JoinError),
 }
@@ -128,92 +109,4 @@ async fn copy_dir_contents(src: &Path, dest: &Path, force: bool) -> Result<(), E
         }
     }
     Ok(())
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct RequestOptions {}
-
-pub(crate) async fn download_file(
-    url: &Url,
-    dest: &File,
-    progress_display: ProgressDisplay,
-) -> Result<(), Error> {
-    // Get size of the remote archive
-    let head_response = HTTP_CLIENT.head(url.as_str()).send().await?;
-    let repo_size = head_response.content_length();
-    let progress = if let Some(s) = repo_size {
-        progress_display.new_progress_bar(Some(s))
-    } else {
-        progress_display.new_spinner()
-    };
-    // Fetch archive and stream to temporary archive
-    progress.set_message("Fetching repo...");
-    let mut get_response = HTTP_CLIENT.get(url.as_str()).send().await?;
-    let mut writer = progress.wrap_write(dest);
-    while let Some(chunk) = get_response.chunk().await? {
-        writer.write_all(&chunk).map_err(Error::Streaming)?;
-    }
-    Ok(())
-}
-
-pub(crate) async fn decompress_archive(
-    archive_path: PathBuf,
-    dest_dir: PathBuf,
-    progress_display: ProgressDisplay,
-) -> Result<(), Error> {
-    task::spawn_blocking(move || {
-        let mut file = File::open(&archive_path).map_err(Error::from)?;
-        // Detect format (GZIP vs ZIP)
-        let mut magic = [0u8; 2];
-        let _ = file.read_exact(&mut magic);
-        // Rewind back to start
-        file.seek(SeekFrom::Start(0)).map_err(Error::from)?;
-
-        let progress = progress_display.new_progress_bar(None);
-        let reader = progress.wrap_read(file);
-
-        match magic {
-            [0x1F, 0x8B] => {
-                // Gzip Magic Number -> Process as Tarball (.tar.gz)
-                progress.set_message("Decompressing Tarball...");
-                let gz = flate2::read::GzDecoder::new(reader);
-                let mut archive = tar::Archive::new(gz);
-                archive.unpack(&dest_dir).map_err(|e| Error::Tar(e))?;
-            }
-            [0x50, 0x4B] => {
-                // PK Zip Magic Number -> Process as Zipfile (.zip)
-                progress.set_message("Extracting Zip Archive...");
-                let mut archive = ZipArchive::new(reader)?;
-                for i in 0..archive.len() {
-                    let mut file = archive.by_index(i)?;
-                    let outpath = match file.enclosed_name() {
-                        Some(path) => dest_dir.join(path),
-                        None => continue, // Skip suspicious/malformed traversal paths
-                    };
-
-                    if file.is_dir() {
-                        std::fs::create_dir_all(&outpath)?;
-                    } else {
-                        if let Some(p) = outpath.parent() {
-                            std::fs::create_dir_all(p)?;
-                        }
-                        let mut outfile = std::fs::File::create(&outpath)?;
-                        std::io::copy(&mut file, &mut outfile)?;
-                    }
-                }
-            }
-            _ => {
-                return Err(Error::UnsupportedArchive {
-                    ext: archive_path
-                        .extension()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string(),
-                });
-            }
-        }
-        progress.finish_with_message("Decompression complete!");
-        Ok(())
-    })
-    .await? // Catch thread panics safely
 }

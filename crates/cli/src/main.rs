@@ -1,7 +1,6 @@
 mod config;
 mod create;
 mod errors;
-mod repo;
 mod resolver;
 
 use std::io;
@@ -33,8 +32,6 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Commands {
     Create(CreateDatasetArgs),
-    #[command(subcommand)]
-    Repo(repo::Commands),
     Config(ConfigArgs),
 }
 
@@ -76,7 +73,6 @@ async fn run() -> Result<()> {
             Ok(())
         }
         Commands::Config(command) => config::run(command),
-        Commands::Repo(commands) => todo!(),
     }
 }
 

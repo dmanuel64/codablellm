@@ -1,9 +1,8 @@
-use std::{num::NonZeroUsize, path::PathBuf, str::FromStr, sync::OnceLock};
+use std::{num::NonZeroUsize, path::PathBuf, sync::OnceLock};
 
 use clap::{Args, ValueEnum};
 use codablellm_core::{
-    BinaryMode, Dataset, Language, Mode, Options, RepoLocation, RepoMetadata, dataset, decompiler,
-    extractor, mapper, repo,
+    BinaryMode, Dataset, Language, Mode, Options, dataset, decompiler, extractor, mapper,
 };
 use color_eyre::eyre::Result;
 use inquire::required;
@@ -15,55 +14,18 @@ use crate::{
     resolver::{IntoResolved, require_or_prompt},
 };
 
-const NETWORK_OPTS_HEADING: &str = "Network Options";
-const REPOSITORY_OPTS_HEADING: &str = "Repository Options";
 const EXTRACTOR_OPTS_HEADING: &str = "Extractor Options";
 const BUILDER_OPTS_HEADING: &str = "Builder Options";
 const DECOMPILER_OPTS_HEADING: &str = "Decompiler Options";
 const DATASET_OPTS_HEADING: &str = "Dataset Options";
-
-fn infer_metadata(val: &str) -> Result<Option<RepoMetadata>> {
-    if let RepoLocation::Url(url) = RepoLocation::from_str(val)? {
-        let metadata = if let Some(m) = RepoMetadata::from_github(&url) {
-            Some(m)
-        } else if let Some(m) = RepoMetadata::from_gitlab(&url) {
-            Some(m)
-        } else if let Some(m) = RepoMetadata::from_gitea(&url) {
-            Some(m)
-        } else {
-            None
-        };
-        Ok(metadata)
-    } else {
-        Ok(None)
-    }
-}
 
 #[derive(Debug, Args)]
 pub struct CreateDatasetArgs {
     /// Name of the dataset being created
     name: Option<String>,
 
-    /// The path or url to the repository
-    repo: Option<RepoLocation>,
-
-    /// The type of the code forge if REPO is a URL
-    ///
-    /// If this option is not specified, it will be automatically determined from the URL
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long)]
-    forge: Option<ForgeChoice>,
-
-    /// An authorization token to access the remote forge
-    #[arg(help_heading = NETWORK_OPTS_HEADING, long)]
-    token: Option<String>,
-
-    /// Skip TLS authorization for fetching the repository from the remote forge
-    #[arg(help_heading = NETWORK_OPTS_HEADING, long)]
-    insecure: bool,
-
-    /// Local path to the certificate authority for the remote forge
-    #[arg(help_heading = NETWORK_OPTS_HEADING, long, conflicts_with = "insecure")]
-    ca_cert: Option<PathBuf>,
+    /// The path to the repository
+    repo: Option<PathBuf>,
 
     /// Path(s) to the built binaries of the repository
     ///
@@ -120,38 +82,8 @@ pub struct CreateDatasetArgs {
     #[arg(short, long, visible_alias = "overwrite")]
     force: bool,
 
-    /// Re-fetch the repository from scratch, overwriting any cached copy
-    ///
-    /// Unlike --force, this only affects the repository download/clone
-    /// step, not the rest of the dataset creation process.
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long, conflicts_with = "force")]
-    force_download: bool,
-
-    /// If the cached repository is a git clone, fetch and fast-forward it
-    ///
-    /// A no-op if the cached copy is already up to date or isn't a git
-    /// clone at all.
-    #[arg(
-        help_heading = REPOSITORY_OPTS_HEADING,
-        long,
-        conflicts_with_all = ["force", "force_download"]
-    )]
-    pull: bool,
-
     #[arg(short, long, visible_alias = "out")]
     output: Option<PathBuf>,
-
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "ref", visible_aliases = ["rev", "branch", "tag"])]
-    git_ref: Option<String>,
-
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "owner", required_if_eq("forge", "other"))]
-    repo_owner: Option<String>,
-
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "name", required_if_eq("forge", "other"))]
-    repo_name: Option<String>,
-
-    #[arg(help_heading = REPOSITORY_OPTS_HEADING, long = "remove", visible_alias = "rm")]
-    remove: bool,
 
     #[arg(help_heading = EXTRACTOR_OPTS_HEADING, long, value_delimiter = ',')]
     include: Vec<PathBuf>,
@@ -195,18 +127,9 @@ impl IntoResolved for CreateDatasetArgs {
             mut build_commands,
             decompilers,
             strip,
-            forge,
-            token,
-            insecure,
-            ca_cert,
             representations,
             force,
-            force_download,
-            pull,
             output,
-            git_ref,
-            repo_owner,
-            repo_name,
             include,
             exclude,
             languages,
@@ -216,7 +139,6 @@ impl IntoResolved for CreateDatasetArgs {
             scripts,
             paired,
             dry_run,
-            remove,
             format,
         } = self;
         let mut prompted = false;
@@ -230,12 +152,10 @@ impl IntoResolved for CreateDatasetArgs {
         })?;
         let repo = require_or_prompt(repo, "REPO", interactive, || {
             prompted = true;
-            Ok(
-                inquire::CustomType::new("Enter the path or URL to the repository")
-                    .with_help_message("URLs should be to a repository's git, tarball, or zipfile")
-                    .with_error_message("Please enter a valid path or URL")
-                    .prompt()?,
-            )
+            Ok(inquire::Text::new("Enter the path to the repository")
+                .with_validator(required!())
+                .prompt()?
+                .into())
         })?;
         let is_compiled_dataset = !binaries.is_empty()
             || !build_commands.is_empty()
@@ -305,21 +225,11 @@ impl IntoResolved for CreateDatasetArgs {
             binaries,
             build_commands,
             dry_run,
-            forge,
-            token,
-            insecure,
-            ca_cert,
             decompilers,
             strip,
             representations,
             force,
-            force_download,
-            pull,
             output,
-            git_ref,
-            repo_owner,
-            repo_name,
-            remove,
             include,
             exclude,
             languages,
@@ -331,16 +241,6 @@ impl IntoResolved for CreateDatasetArgs {
             format,
         })
     }
-}
-
-#[derive(Debug, Clone, Copy, ValueEnum, Display)]
-#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
-#[clap(rename_all = "lowercase")]
-pub enum ForgeChoice {
-    GitHub,
-    GitLab,
-    Gitea,
-    Other,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum, Display)]
@@ -364,24 +264,14 @@ pub enum RepresentationChoice {
 #[derive(Debug)]
 pub struct ResolvedCreateDatasetArgs {
     name: String,
-    repo: RepoLocation,
-    forge: Option<ForgeChoice>,
-    token: Option<String>,
-    insecure: bool,
-    ca_cert: Option<PathBuf>,
+    repo: PathBuf,
     binaries: Vec<PathBuf>,
     build_commands: Vec<String>,
     decompilers: Vec<String>,
     strip: bool,
     representations: Vec<RepresentationChoice>,
     force: bool,
-    force_download: bool,
-    pull: bool,
     output: Option<PathBuf>,
-    git_ref: Option<String>,
-    repo_owner: Option<String>,
-    repo_name: Option<String>,
-    remove: bool,
     include: Vec<PathBuf>,
     exclude: Vec<PathBuf>,
     languages: Vec<Language>,
@@ -401,21 +291,11 @@ pub async fn create_dataset(
         name,
         repo,
         dry_run,
-        forge,
-        token,
-        insecure,
-        ca_cert,
         decompilers,
         strip,
         representations,
         force,
-        force_download,
-        pull,
         output,
-        git_ref,
-        repo_owner,
-        repo_name,
-        remove,
         include,
         exclude,
         languages,
@@ -448,35 +328,12 @@ pub async fn create_dataset(
             .into());
         }
     }
-    let metadata = if let (Some(owner), Some(name), git_ref) = (repo_owner, repo_name, git_ref) {
-        RepoMetadata {
-            owner,
-            name,
-            git_ref,
-        }
-    } else if let Some(m) = infer_metadata(&repo.to_string())? {
-        m
-    } else {
-        return Err(user_error("--owner <REPO_OWNER> and --name <REPO_NAME> are required when using local repositories or non-standard forges").into());
-    };
-    let refresh_mode = if force || force_download {
-        Some(repo::RefreshMode::ForceDownload)
-    } else if pull {
-        Some(repo::RefreshMode::Pull)
-    } else {
-        None
-    };
     let dataset = codablellm_core::run_with_options(
         repo,
-        metadata,
         mode,
         Options {
             display_progress,
             dry_run,
-            repo_options: repo::Options {
-                force: refresh_mode,
-                ..repo::Options::default()
-            },
             extractor_options: extractor::Options { display_progress },
             decompiler_options: decompiler::Options { display_progress },
             mapper_options: mapper::Options { display_progress },
