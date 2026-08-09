@@ -869,6 +869,7 @@ dependencies = [
  "clap",
  "codablellm-core",
  "color-eyre",
+ "directories",
  "figment",
  "human-panic",
  "inquire",
@@ -914,7 +915,6 @@ version = "2.0.0"
 dependencies = [
  "bollard",
  "clap",
- "directories",
  "futures-util",
  "glob",
  "indicatif",

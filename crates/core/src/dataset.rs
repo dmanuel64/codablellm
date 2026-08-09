@@ -6,7 +6,7 @@ use std::{
 use polars::prelude::*;
 use thiserror::Error;
 
-use crate::{function::Function, storage};
+use crate::function::Function;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -90,17 +90,14 @@ pub struct Script {
 }
 
 impl Script {
-    pub fn new(path: &Path) -> Result<Self, storage::Error> {
+    pub fn new(path: &Path) -> Self {
         Self::new_with_options(path, &ScriptOptions::default())
     }
 
-    pub fn new_with_options(path: &Path, options: &ScriptOptions) -> Result<Self, storage::Error> {
-        let name = path.display().to_string();
-        // let dest = SCRIPTS_DIR.join(name);
-        // storage::copy_data("script", path, &dest, false)?;
-        Ok(Self {
+    pub fn new_with_options(_path: &Path, options: &ScriptOptions) -> Self {
+        Self {
             engine: options.engine,
-        })
+        }
     }
 
     pub fn run(&self) -> Result<(), Error> {

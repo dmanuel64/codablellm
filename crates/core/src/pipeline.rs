@@ -12,7 +12,6 @@ use crate::{
     function::Function,
     language, mapper,
     repo::{self, Repository},
-    storage,
 };
 
 #[derive(Debug, Error)]
@@ -23,8 +22,6 @@ pub enum Error {
     Extractor(#[from] extractor::Error),
     #[error(transparent)]
     Builder(#[from] builder::Error),
-    #[error(transparent)]
-    Storage(#[from] storage::Error),
 }
 
 struct Manager {

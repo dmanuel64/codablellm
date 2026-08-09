@@ -10,7 +10,6 @@ pub mod language;
 pub mod mapper;
 pub mod pipeline;
 pub mod repo;
-pub mod storage;
 pub(crate) mod utils;
 
 pub use dataset::{BinaryDataset, Dataset, SourceDataset};

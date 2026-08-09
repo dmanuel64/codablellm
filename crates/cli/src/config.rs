@@ -206,18 +206,6 @@ enum Commands {
         #[arg(long)]
         unset: bool,
     },
-    #[command(name = "forge.github-token")]
-    ForgeGitHubToken {
-        token: Option<String>,
-        #[arg(long)]
-        unset: bool,
-    },
-    #[command(name = "forge.gitlab-token")]
-    ForgeGitLabToken {
-        token: Option<String>,
-        #[arg(long)]
-        unset: bool,
-    },
     #[command(name = "languages.headers-as-cpp")]
     LanguagesHeadersAsCpp {
         #[arg(action = clap::ArgAction::Set)]

@@ -2,11 +2,11 @@ mod config;
 mod create;
 mod errors;
 mod resolver;
+mod storage;
 
 use std::io;
 
 use clap::{ArgAction, Parser, Subcommand};
-use codablellm_core::storage;
 use color_eyre::eyre::Result;
 use mimalloc::MiMalloc;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
@@ -21,9 +21,12 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
+#[command(args_conflicts_with_subcommands = true)]
 struct Cli {
     #[clap(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
+    #[clap(flatten)]
+    create: CreateDatasetArgs,
     /// Number of times to greet
     #[arg(short, long, action = ArgAction::Count, default_value_t = config::get().display.console_log_level.into())]
     verbose: u8,
@@ -31,7 +34,6 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    Create(CreateDatasetArgs),
     Config(ConfigArgs),
 }
 
@@ -68,11 +70,11 @@ async fn run() -> Result<()> {
     let _guard = init_logger(args.verbose);
     let no_input = !config::get().display.interactive;
     match args.command {
-        Commands::Create(args) => {
-            let dataset = create::create_dataset(resolver::resolve(args, no_input)?).await?;
+        Some(Commands::Config(command)) => config::run(command),
+        None => {
+            create::create_dataset(resolver::resolve(args.create, no_input)?).await?;
             Ok(())
         }
-        Commands::Config(command) => config::run(command),
     }
 }
 
