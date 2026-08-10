@@ -1,5 +1,6 @@
 use glob::glob;
 use std::{io, path::PathBuf};
+use strum::IntoEnumIterator;
 use thiserror::Error;
 
 use crate::language::Language;
@@ -16,6 +17,21 @@ pub struct Repository {
 }
 
 impl Repository {
+    pub fn new(path: PathBuf) -> Result<Self, Error> {
+        Self::new_with_languages(path, Language::iter().collect())
+    }
+
+    pub fn new_with_languages(path: PathBuf, languages: Vec<Language>) -> Result<Self, Error> {
+        if !path.is_dir() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("{} is not a directory", path.display()),
+            )
+            .into());
+        }
+        Ok(Self { path, languages })
+    }
+
     pub fn source_files(&self) -> Vec<PathBuf> {
         let mut paths = Vec::new();
         for ext in self.languages.iter().flat_map(Language::file_extensions) {
@@ -24,19 +40,4 @@ impl Repository {
         }
         paths
     }
-}
-
-pub fn load(path: PathBuf) -> Result<Repository, Error> {
-    if !path.is_dir() {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("{} is not a directory", path.display()),
-        )
-        .into());
-    }
-
-    Ok(Repository {
-        path,
-        languages: Vec::new(), // TODO: detect languages present in the repo
-    })
 }

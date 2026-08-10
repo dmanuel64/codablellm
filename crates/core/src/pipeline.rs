@@ -73,7 +73,7 @@ impl Manager {
     async fn process(&mut self, stage: &Stage) -> Result<(), Error> {
         match stage {
             Stage::Loading => {
-                self.repo = Some(repo::load(self.path.clone())?);
+                self.repo = Some(Repository::new(self.path.clone())?);
             }
             Stage::ExtractSourceCode => {
                 self.extracted_functions = extractor::extract_with_options(

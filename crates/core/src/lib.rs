@@ -16,4 +16,5 @@ pub use dataset::{BinaryDataset, Dataset, SourceDataset};
 pub use language::Language;
 pub use pipeline::Error as CodablellmError;
 pub use pipeline::{BinaryMode, Mode, Options, run, run_with_options};
+pub use repo::Repository;
 pub use utils::ProgressDisplay;
