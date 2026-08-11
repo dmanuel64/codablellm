@@ -1,4 +1,5 @@
 use glob::glob;
+use serde::{Deserialize, Serialize};
 use std::{io, path::PathBuf};
 use strum::IntoEnumIterator;
 use thiserror::Error;
@@ -11,6 +12,7 @@ pub enum Error {
     Io(#[from] io::Error),
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Repository {
     pub path: PathBuf,
     pub languages: Vec<Language>,

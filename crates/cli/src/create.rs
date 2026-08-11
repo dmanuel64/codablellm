@@ -12,6 +12,7 @@ use crate::{
     config,
     errors::user_error,
     resolver::{IntoResolved, require_or_prompt},
+    storage,
 };
 
 const EXTRACTOR_OPTS_HEADING: &str = "Extractor Options";
@@ -79,6 +80,9 @@ pub struct CreateDatasetArgs {
     )]
     representations: Vec<RepresentationChoice>,
 
+    #[arg(long)]
+    discard_state: bool,
+
     #[arg(short, long, visible_alias = "overwrite")]
     force: bool,
 
@@ -140,6 +144,7 @@ impl IntoResolved for CreateDatasetArgs {
             paired,
             dry_run,
             format,
+            discard_state,
         } = self;
         let mut prompted = false;
         let name = require_or_prompt(name, "NAME", interactive, || {
@@ -239,6 +244,7 @@ impl IntoResolved for CreateDatasetArgs {
             scripts,
             paired,
             format,
+            discard_state,
         })
     }
 }
@@ -282,6 +288,7 @@ pub struct ResolvedCreateDatasetArgs {
     paired: bool,
     format: FormatChoice,
     dry_run: bool,
+    discard_state: bool,
 }
 
 pub async fn create_dataset(
@@ -305,6 +312,7 @@ pub async fn create_dataset(
         scripts,
         paired,
         format,
+        discard_state,
     }: ResolvedCreateDatasetArgs,
 ) -> Result<Dataset> {
     let cfg = config::get();
@@ -331,13 +339,11 @@ pub async fn create_dataset(
     let dataset = codablellm_core::run_with_options(
         repo,
         mode,
-        Options {
+        &Options {
             display_progress,
             dry_run,
-            extractor_options: extractor::Options { display_progress },
-            decompiler_options: decompiler::Options { display_progress },
-            mapper_options: mapper::Options { display_progress },
-            dataset_options: dataset::Options { display_progress },
+            state_dir: Some(&storage::CACHE_DIR),
+            ..Default::default()
         },
     )
     .await?;

@@ -3,12 +3,12 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
-#[derive(Debug, Clone, Copy, Display, EnumIter)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Display, EnumIter)]
+#[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase", ascii_case_insensitive)]
 #[cfg_attr(
     feature = "value-enums",
-    derive(clap::ValueEnum, Serialize, Deserialize),
-    serde(rename_all = "lowercase"),
+    derive(clap::ValueEnum),
     clap(rename_all = "lowercase")
 )]
 pub enum Language {

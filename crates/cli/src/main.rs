@@ -48,7 +48,7 @@ fn init_logger(verbosity: u8) -> tracing_appender::non_blocking::WorkerGuard {
     let file_level = config::get().display.file_log_level;
 
     let file_appender =
-        tracing_appender::rolling::never(storage::STATE_DIR.clone(), "codablellm.log");
+        tracing_appender::rolling::never(storage::STATE_DIR.as_ref(), "codablellm.log");
     let (non_blocking_writer, guard) = tracing_appender::non_blocking(file_appender);
     let console_layer = fmt::layer()
         .with_writer(io::stderr)

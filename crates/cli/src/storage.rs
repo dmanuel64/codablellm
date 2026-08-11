@@ -1,5 +1,6 @@
 use directories::ProjectDirs;
 use std::{
+    borrow::Cow,
     path::{Path, PathBuf},
     sync::LazyLock,
 };
@@ -9,9 +10,11 @@ static DIRS: LazyLock<ProjectDirs> = LazyLock::new(|| {
         .expect("a home directory to be found on the host system")
 });
 
+pub static DATA_DIR: LazyLock<&Path> = LazyLock::new(|| DIRS.data_local_dir());
 pub static CONFIG_DIR: LazyLock<&Path> = LazyLock::new(|| DIRS.config_local_dir());
-pub static STATE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+pub static CACHE_DIR: LazyLock<&Path> = LazyLock::new(|| DIRS.cache_dir());
+pub static STATE_DIR: LazyLock<Cow<'_, Path>> = LazyLock::new(|| {
     DIRS.state_dir()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| DIRS.data_local_dir().join("state"))
+        .map(Cow::from)
+        .unwrap_or_else(|| DATA_DIR.join("state").into())
 });

@@ -1,14 +1,13 @@
+use indicatif::HumanCount;
 use std::{
     fs, io,
     path::{Path, PathBuf},
     str::Utf8Error,
 };
-
-use indicatif::ProgressBar;
 use thiserror::Error;
 use tree_sitter::StreamingIterator;
 
-use crate::{function::Function, language::Language, repo::Repository};
+use crate::{ProgressDisplay, function::Function, language::Language, repo::Repository};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -22,17 +21,9 @@ pub enum Error {
     Decode(#[from] Utf8Error),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Options {
-    pub display_progress: bool,
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self {
-            display_progress: true,
-        }
-    }
+    pub progress_display: ProgressDisplay,
 }
 
 pub fn extract(repo: &Repository) -> Result<Vec<Function>, Error> {
@@ -41,17 +32,21 @@ pub fn extract(repo: &Repository) -> Result<Vec<Function>, Error> {
 
 pub fn extract_with_options(
     repo: &Repository,
-    Options { display_progress }: &Options,
+    Options { progress_display }: &Options,
 ) -> Result<Vec<Function>, Error> {
     let mut functions = Vec::new();
-    let progress = if *display_progress {
-        ProgressBar::no_length()
-    } else {
-        ProgressBar::hidden()
-    };
+    let progress = progress_display.new_progress_bar(None);
     let mut parser = tree_sitter::Parser::new();
-    for source_file in progress.wrap_iter(repo.source_files().into_iter()) {
+    let source_files = progress.wrap_iter(repo.source_files().into_iter());
+    if let (_, Some(num_files)) = source_files.size_hint() {
+        tracing::info!(
+            "Will attempt to extract {} source code files",
+            HumanCount(num_files as u64)
+        )
+    }
+    for source_file in source_files {
         if let Some(language) = Language::from_path(&source_file) {
+            tracing::debug!(file = %source_file.display(), "Extracting source code file");
             let extraction_results = match language {
                 Language::C => extract_c_file(&mut parser, &source_file),
                 Language::Cpp => extract_cpp_file(&mut parser, &source_file),
@@ -65,8 +60,15 @@ pub fn extract_with_options(
             };
             match extraction_results {
                 Ok(source_file_functions) => functions.extend(source_file_functions),
-                Err(_) => todo!(),
+                Err(error) => {
+                    tracing::warn!(?error, file = %source_file.display(), "Failed to extract source code functions");
+                }
             };
+        } else {
+            tracing::warn!(
+                file = %source_file.display(),
+                "Failed to recognize language from file"
+            );
         }
     }
     Ok(functions)

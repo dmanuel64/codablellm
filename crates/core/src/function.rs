@@ -1,7 +1,10 @@
 use std::{ops::Range, path::PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 use crate::Language;
 
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Function {
     Source {
         name: String,
