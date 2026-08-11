@@ -32,12 +32,11 @@ impl Repository {
         Ok(Self { path, languages })
     }
 
-    pub fn source_files(&self) -> Vec<PathBuf> {
-        let mut paths = Vec::new();
-        for ext in self.languages.iter().flat_map(Language::file_extensions) {
-            let pattern = format!("{}/**/*.{}", self.path.display(), ext);
-            paths.extend(glob(&pattern).expect("glob pattern to be valid").flatten());
-        }
-        paths
+    pub fn source_files(&self) -> impl Iterator<Item = PathBuf> {
+        self.languages
+            .iter()
+            .flat_map(Language::file_extensions)
+            .map(|ext| format!("{}/**/*.{}", self.path.display(), ext))
+            .flat_map(|pattern| glob(&pattern).expect("glob pattern to be valid").flatten())
     }
 }
