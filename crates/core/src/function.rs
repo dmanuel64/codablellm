@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Language;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Function {
     Source {
         name: String,

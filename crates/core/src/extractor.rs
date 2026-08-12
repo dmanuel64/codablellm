@@ -19,6 +19,36 @@ pub enum Error {
     },
     #[error("failed to decode")]
     Decode(#[from] Utf8Error),
+    #[error("failed to transform function '{}': {source}", function.name())]
+    Transform {
+        function: Function,
+        source: anyhow::Error,
+    },
+}
+
+pub enum Transform {
+    Native(Box<dyn Fn(&Function) -> anyhow::Result<String> + Send>),
+    #[cfg(feature = "rhai")]
+    Rhai {
+        file: PathBuf,
+    },
+}
+
+impl Transform {
+    pub fn eval(&self, function: &Function) -> Result<String, Error> {
+        match self {
+            Transform::Native(f) => f(function),
+            #[cfg(feature = "rhai")]
+            Transform::Rhai { file } => {
+                let engine = rhai::Engine::new();
+                engine.eval_file(file.clone()).map_err(anyhow::Error::from)
+            }
+        }
+        .map_err(|source| Error::Transform {
+            function: function.clone(),
+            source,
+        })
+    }
 }
 
 #[derive(Debug, Default)]
@@ -30,8 +60,25 @@ pub fn extract(repo: &Repository) -> Result<Vec<Function>, Error> {
     extract_with_options(repo, &Options::default())
 }
 
-pub fn extract_with_options(
+pub fn extract_with_options(repo: &Repository, options: &Options) -> Result<Vec<Function>, Error> {
+    extract_inner(repo, None, options)
+}
+
+pub fn transform(repo: &Repository, transform: &Transform) -> Result<Vec<Function>, Error> {
+    transform_with_options(repo, transform, &Options::default())
+}
+
+pub fn transform_with_options(
     repo: &Repository,
+    transform: &Transform,
+    options: &Options,
+) -> Result<Vec<Function>, Error> {
+    extract_inner(repo, Some(transform), options)
+}
+
+fn extract_inner(
+    repo: &Repository,
+    transform: Option<&Transform>,
     Options { progress_display }: &Options,
 ) -> Result<Vec<Function>, Error> {
     let mut functions = Vec::new();

@@ -24,7 +24,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-codablellm-core = { workspace = true, features = ["full"] }
+codablellm-core = { workspace = true, features = ["rhai"] }
 
 mimalloc.workspace = true
 
