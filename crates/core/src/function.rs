@@ -1,4 +1,9 @@
-use std::{ops::Range, path::PathBuf};
+use std::{
+    ffi::OsStr,
+    fmt::Display,
+    ops::Range,
+    path::{Path, PathBuf},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -41,5 +46,57 @@ impl Function {
             Function::Decompiled { definition, .. } => &definition,
             Function::Assembly { definition, .. } => &definition,
         }
+    }
+
+    pub fn source(&self) -> &Path {
+        match self {
+            Function::Source { file, .. } => &file,
+            Function::Decompiled { binary, .. } => &binary,
+            Function::Assembly { binary, .. } => &binary,
+        }
+    }
+
+    pub fn language(&self) -> String {
+        match self {
+            Function::Source { language, .. } => language.to_string(),
+            Function::Decompiled { .. } => String::from("Pseudo-C (Decompiled Code)"),
+            Function::Assembly { .. } => String::from("Assembly"),
+        }
+    }
+}
+
+impl Display for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}::{}",
+            self.source()
+                .file_name()
+                .map(OsStr::to_string_lossy)
+                .unwrap_or_else(|| String::from("<UNKNOWN>").into()),
+            self.name()
+        )
+    }
+}
+
+#[cfg(feature = "rhai")]
+impl rhai::CustomType for Function {
+    fn build(mut builder: rhai::TypeBuilder<Self>) {
+        builder
+            .with_name("Function")
+            .with_get("name", |func: &mut Self| func.name().to_string())
+            .with_get("language", |func: &mut Self| func.language())
+            .with_get_set(
+                "definition",
+                |func: &mut Self| func.definition().to_string(),
+                |func: &mut Self, val: String| {
+                    let definition = match func {
+                        Function::Source { definition, .. } => definition,
+                        Function::Decompiled { definition, .. } => definition,
+                        Function::Assembly { definition, .. } => definition,
+                    };
+                    *definition = val;
+                },
+            );
     }
 }

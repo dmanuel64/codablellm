@@ -35,17 +35,22 @@ pub enum Transform {
 }
 
 impl Transform {
-    pub fn eval(&self, function: &Function) -> Result<String, Error> {
+    pub fn eval(&self, function: Function) -> Result<String, Error> {
         match self {
-            Transform::Native(f) => f(function),
+            Transform::Native(f) => f(&function),
             #[cfg(feature = "rhai")]
             Transform::Rhai { file } => {
-                let engine = rhai::Engine::new();
-                engine.eval_file(file.clone()).map_err(anyhow::Error::from)
+                let mut engine = rhai::Engine::new();
+                engine.register_type::<Function>();
+                let mut scope = rhai::Scope::new();
+                scope.push("function", function.clone());
+                engine
+                    .eval_file_with_scope(&mut scope, file.clone())
+                    .map_err(anyhow::Error::from)
             }
         }
         .map_err(|source| Error::Transform {
-            function: function.clone(),
+            function: function,
             source,
         })
     }
@@ -54,6 +59,7 @@ impl Transform {
 #[derive(Debug, Default)]
 pub struct Options {
     pub progress_display: ProgressDisplay,
+    pub headers_as_cpp: bool,
 }
 
 pub fn extract(repo: &Repository) -> Result<Vec<Function>, Error> {
@@ -79,7 +85,10 @@ pub fn transform_with_options(
 fn extract_inner(
     repo: &Repository,
     transform: Option<&Transform>,
-    Options { progress_display }: &Options,
+    Options {
+        progress_display,
+        headers_as_cpp,
+    }: &Options,
 ) -> Result<Vec<Function>, Error> {
     let mut functions = Vec::new();
     let progress = progress_display.new_progress_bar(None);

@@ -174,6 +174,7 @@ where
                     state.repo.as_ref().expect("repo to be initialized"),
                     &extractor::Options {
                         progress_display: ProgressDisplay::Nested(overall_progress.clone()),
+                        ..Default::default()
                     },
                 )?);
             }
