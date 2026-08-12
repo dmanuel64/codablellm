@@ -1,5 +1,6 @@
 use indicatif::HumanCount;
 use std::{
+    borrow::Cow,
     fs, io,
     path::{Path, PathBuf},
     str::Utf8Error,
@@ -27,17 +28,29 @@ pub enum Error {
 }
 
 pub enum Transform {
-    Native(Box<dyn Fn(&Function) -> anyhow::Result<String> + Send>),
+    Native(Box<dyn for<'a> Fn(&'a Function) -> anyhow::Result<MaybeChangedFunction<'a>> + Send>),
     #[cfg(feature = "rhai")]
     Rhai {
         file: PathBuf,
     },
 }
 
+pub type MaybeChangedFunction<'a> = Cow<'a, Function>;
+
+pub trait MaybeChangedFunctionExt {
+    fn is_changed(&self) -> bool;
+}
+
+impl MaybeChangedFunctionExt for MaybeChangedFunction<'_> {
+    fn is_changed(&self) -> bool {
+        matches!(self, Cow::Owned(_))
+    }
+}
+
 impl Transform {
-    pub fn eval(&self, function: Function) -> Result<String, Error> {
+    pub fn apply<'a>(&self, function: &'a Function) -> Result<MaybeChangedFunction<'a>, Error> {
         match self {
-            Transform::Native(f) => f(&function),
+            Transform::Native(f) => f(function),
             #[cfg(feature = "rhai")]
             Transform::Rhai { file } => {
                 let mut engine = rhai::Engine::new();
@@ -45,12 +58,22 @@ impl Transform {
                 let mut scope = rhai::Scope::new();
                 scope.push("function", function.clone());
                 engine
-                    .eval_file_with_scope(&mut scope, file.clone())
+                    .run_file_with_scope(&mut scope, file.clone())
+                    .map(|_| {
+                        let new_function = scope
+                            .get_value_ref::<Function>("function")
+                            .unwrap_or(function);
+                        if new_function.definition() == function.definition() {
+                            Cow::Borrowed(function)
+                        } else {
+                            Cow::Owned(new_function.clone())
+                        }
+                    })
                     .map_err(anyhow::Error::from)
             }
         }
         .map_err(|source| Error::Transform {
-            function: function,
+            function: function.clone(),
             source,
         })
     }
@@ -172,6 +195,7 @@ fn query_functions(
                 language,
                 line_range,
                 column_range,
+                extra: None,
             });
         }
     }
@@ -196,6 +220,8 @@ fn parse(
     })?;
     Ok((tree, source))
 }
+
+fn update_function(parser: &mut tree_sitter::Parser, function: &Function) -> Result<(), Error> {}
 
 fn extract_c_file(parser: &mut tree_sitter::Parser, path: &Path) -> Result<Vec<Function>, Error> {
     let (tree, source) = parse(parser, &tree_sitter_c::LANGUAGE.into(), path)?;
