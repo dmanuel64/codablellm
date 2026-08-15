@@ -3,7 +3,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, IntoEnumIterator};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Display, EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumIter)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase", ascii_case_insensitive)]
 #[cfg_attr(
@@ -57,5 +57,21 @@ impl Language {
     pub fn from_path(path: &Path) -> Option<Language> {
         let ext = path.extension()?.to_str()?;
         Self::iter().find(|l| l.file_extensions().contains(&ext))
+    }
+}
+
+impl From<Language> for tree_sitter::Language {
+    fn from(value: Language) -> Self {
+        match value {
+            Language::C => tree_sitter_c::LANGUAGE.into(),
+            Language::Cpp => tree_sitter_cpp::LANGUAGE.into(),
+            Language::Python => tree_sitter_python::LANGUAGE.into(),
+            Language::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            Language::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            Language::Go => tree_sitter_go::LANGUAGE.into(),
+            Language::Rust => tree_sitter_rust::LANGUAGE.into(),
+            Language::Java => tree_sitter_java::LANGUAGE.into(),
+            Language::CSharp => tree_sitter_c_sharp::LANGUAGE.into(),
+        }
     }
 }
