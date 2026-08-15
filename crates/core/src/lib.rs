@@ -8,6 +8,7 @@ pub mod extractor;
 pub mod function;
 pub mod language;
 pub mod mapper;
+pub(crate) mod parser;
 pub mod pipeline;
 pub mod repo;
 pub(crate) mod utils;

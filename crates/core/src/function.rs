@@ -3,11 +3,69 @@ use std::{
     fmt::Display,
     ops::Range,
     path::{Path, PathBuf},
+    str::Utf8Error,
 };
 
 use serde::{Deserialize, Serialize};
 
-use crate::Language;
+use crate::{Language, parser::ParsedCode};
+
+const C_FUNCTION_SEXP: &str = r#"
+        (function_definition
+            declarator: (function_declarator
+                declarator: (identifier) @name)
+        ) @definition
+    "#;
+const CPP_FUNCTION_SEXP: &str = r#"
+        (function_definition
+            declarator: (function_declarator
+                declarator: [(identifier) (field_identifier)] @name)
+        ) @definition
+    "#;
+const PYTHON_FUNCTION_SEXP: &str = r#"
+        (function_definition
+            name: (identifier) @name
+        ) @definition
+    "#;
+const JAVASCRIPT_FUNCTION_SEXP: &str = r#"
+        [
+            (function_declaration
+                name: (identifier) @name) @definition
+            (method_definition
+                name: (property_identifier) @name) @definition
+        ]
+    "#;
+const TYPESCRIPT_FUNCTION_SEXP: &str = r#"
+        [
+            (function_declaration
+                name: (identifier) @name) @definition
+            (method_definition
+                name: (property_identifier) @name) @definition
+        ]
+    "#;
+const GO_FUNCTION_SEXP: &str = r#"
+        (function_declaration
+            name: (identifier) @name
+        ) @definition
+        (method_declaration
+            name: (field_identifier) @name
+        ) @definition
+    "#;
+const RUST_FUNCTION_SEXP: &str = r#"
+        (function_item
+            name: (identifier) @name
+        ) @definition
+    "#;
+const JAVA_FUNCTION_SEXP: &str = r#"
+        (method_declaration
+            name: (identifier) @name
+        ) @definition
+    "#;
+const CSHARP_FUNCTION_SEXP: &str = r#"
+        (method_declaration
+            name: (identifier) @name
+        ) @definition
+    "#;
 
 // TODO: metadata isn't the most accurate name to include name & definition
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,5 +270,125 @@ impl rhai::CustomType for Function {
                     func.edit(None, val);
                 },
             );
+    }
+}
+
+pub(crate) struct ParsedFunctions {
+    code: ParsedCode,
+    functions: Vec<Function>,
+}
+
+impl ParsedFunctions {
+    pub fn new(code: ParsedCode) -> Self {
+        Self {
+            code,
+            functions: Vec::new(),
+        }
+    }
+
+    fn functions_inner(&mut self) -> Result<Vec<Function>, Error> {
+        let sexp = match self.code.language() {
+            Language::C => C_FUNCTION_SEXP,
+            Language::Cpp => CPP_FUNCTION_SEXP,
+            Language::Python => PYTHON_FUNCTION_SEXP,
+            Language::JavaScript => JAVASCRIPT_FUNCTION_SEXP,
+            Language::TypeScript => TYPESCRIPT_FUNCTION_SEXP,
+            Language::Go => GO_FUNCTION_SEXP,
+            Language::Rust => RUST_FUNCTION_SEXP,
+            Language::Java => JAVA_FUNCTION_SEXP,
+            Language::CSharp => CSHARP_FUNCTION_SEXP,
+        };
+
+        let language = self.code.language();
+        let source = self.code.source.clone();
+        let code = self.code.code().clone();
+
+        let name_idx = self
+            .code
+            .query
+            .as_ref()
+            .expect("query to be populated")
+            .capture_index_for_name("name")
+            .expect("The s-expression to contain the name capture group");
+        let definition_idx = self
+            .code
+            .query
+            .as_ref()
+            .expect("query to be populated")
+            .capture_index_for_name("definition")
+            .expect("The s-expression to contain the definition capture group");
+        let mut matches = self.code.query(sexp)?;
+        let mut functions = Vec::new();
+        while let Some(m) = matches.next() {
+            let name_capture = m.captures.iter().find(|c| c.index == name_idx);
+            let definition_capture = m.captures.iter().find(|c| c.index == definition_idx);
+            if let (Some(name), Some(def)) = (name_capture, definition_capture) {
+                let name = name
+                    .node
+                    .utf8_text(&code)
+                    .map_err(Utf8Error::from)?
+                    .to_string();
+                let definition = def
+                    .node
+                    .utf8_text(&code)
+                    .map_err(Utf8Error::from)?
+                    .to_string();
+                let range = def.node.range();
+                let bytes_range = def.node.byte_range();
+                let line_range = range.start_point.row..range.end_point.row;
+                let column_range = range.start_point.column..range.end_point.column;
+                functions.push(Function::new_source(
+                    name,
+                    definition,
+                    source.clone(),
+                    *language,
+                    bytes_range,
+                    line_range,
+                    column_range,
+                ));
+            }
+        }
+        Ok(functions)
+    }
+
+    pub fn functions(&mut self) -> Result<&[Function], Error> {
+        if self.functions.is_empty() {
+            self.functions = self.functions_inner()?;
+        }
+        Ok(&self.functions)
+    }
+
+    fn functions_mut(&mut self) -> Result<&mut Vec<Function>, Error> {
+        if self.functions.is_empty() {
+            self.functions = self.functions_inner()?;
+        }
+        Ok(&mut self.functions)
+    }
+
+    pub fn edit_functions<EditFn>(&mut self, e: EditFn) -> Result<(), Error>
+    where
+        EditFn: Fn(&mut Function),
+    {
+        for function in self.functions_mut()? {
+            let old_definition = function.definition().to_string();
+            e(function);
+            let is_changed = old_definition == function.definition();
+            if is_changed {
+                self.code.edit(|bytes| {})?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl From<ParsedCode> for ParsedFunctions {
+    fn from(value: ParsedCode) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<ParsedFunctions> for ParsedCode {
+    fn from(value: ParsedFunctions) -> Self {
+        value.code
     }
 }
