@@ -149,8 +149,8 @@ fn extract_file(
     transform: Option<&Transform>,
     headers_as_cpp: bool,
 ) -> Result<Vec<Function>, Error> {
-    let mut parsed_functions: ParsedFunctions =
-        ParsedCode::try_from_path_with_options(path, headers_as_cpp)?.into();
+    let mut parsed_functions =
+        ParsedFunctions::new(ParsedCode::try_from_path_with_options(path, headers_as_cpp)?);
     if let Some(t) = transform {
         parsed_functions.edit(|f| match t.apply(f) {
             Ok(new_function) if new_function.is_changed() => {
