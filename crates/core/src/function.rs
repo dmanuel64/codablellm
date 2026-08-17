@@ -395,6 +395,7 @@ impl ParsedFunctions {
             })
         });
 
+        let mut any_changed = false;
         for i in order {
             let function = &mut functions[i];
             let old_definition = function.definition().to_string();
@@ -409,11 +410,15 @@ impl ParsedFunctions {
                 if let Some(start) = start {
                     let end = start + old_definition.len();
                     let new_definition = function.definition().to_string();
-                    code.edit(|bytes| {
-                        bytes.splice(start..end, new_definition.into_bytes());
-                    })?;
+                    code.edit_range(start..end, new_definition);
+                    any_changed = true;
                 }
             }
+        }
+        // One incremental reparse for the whole batch, instead of one per
+        // changed function.
+        if any_changed {
+            code.commit()?;
         }
         Ok(())
     }

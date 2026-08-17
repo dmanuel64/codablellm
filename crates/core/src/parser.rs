@@ -2,6 +2,7 @@ use std::{
     cell::RefCell,
     ffi::OsStr,
     fs, io,
+    ops::Range,
     path::{Path, PathBuf},
     str::Utf8Error,
 };
@@ -121,42 +122,41 @@ impl ParsedCode {
         Ok((query_ref, matches))
     }
 
-    pub fn edit<EditFn>(&mut self, e: EditFn) -> Result<(), Error>
-    where
-        EditFn: FnOnce(&mut Vec<u8>),
-    {
-        let old_code = self.code.clone();
-        e(&mut self.code);
-        let new_code = &self.code;
+    /// Splices `replacement` into the byte range `range`, updating the
+    /// tree's edit bookkeeping for that region. Doesn't reparse - call
+    /// `commit()` once after all edits are staged, so N edits share a
+    /// single incremental reparse instead of paying for one each.
+    ///
+    /// Unlike a generic "mutate then diff the whole buffer" approach, this
+    /// goes straight from the known range to the `InputEdit`, since the
+    /// caller already knows exactly what changed.
+    pub fn edit_range(&mut self, range: Range<usize>, replacement: impl Into<Vec<u8>>) {
+        let replacement = replacement.into();
 
-        let common_prefix = old_code
-            .iter()
-            .zip(new_code.iter())
-            .take_while(|(a, b)| a == b)
-            .count();
-        let old_suffix_max = old_code.len() - common_prefix;
-        let new_suffix_max = new_code.len() - common_prefix;
-        let common_suffix = old_code[common_prefix..]
-            .iter()
-            .rev()
-            .zip(new_code[common_prefix..].iter().rev())
-            .take(old_suffix_max.min(new_suffix_max))
-            .take_while(|(a, b)| a == b)
-            .count();
+        let start_byte = range.start;
+        let old_end_byte = range.end;
+        let new_end_byte = range.start + replacement.len();
+        let start_position = point_at(&self.code, start_byte);
+        let old_end_position = point_at(&self.code, old_end_byte);
+        let new_end_position = advance_point(start_position, &replacement);
 
-        let start_byte = common_prefix;
-        let old_end_byte = old_code.len() - common_suffix;
-        let new_end_byte = new_code.len() - common_suffix;
+        self.code.splice(range, replacement);
 
         self.tree.edit(&tree_sitter::InputEdit {
             start_byte,
             old_end_byte,
             new_end_byte,
-            start_position: point_at(&old_code, start_byte),
-            old_end_position: point_at(&old_code, old_end_byte),
-            new_end_position: point_at(new_code, new_end_byte),
+            start_position,
+            old_end_position,
+            new_end_position,
         });
+    }
 
+    /// Reparses after one or more `edit_range` calls, incrementally reusing
+    /// whatever those `tree.edit()` calls marked as unaffected. A no-op to
+    /// call `edit_range` and never `commit()` other than leaving the tree
+    /// out of sync with `code()` - always pair them.
+    pub fn commit(&mut self) -> Result<(), Error> {
         self.tree = PARSER.with_borrow_mut(|parser| {
             parser
                 .set_language(&self.language.into())
@@ -184,6 +184,22 @@ fn point_at(bytes: &[u8], byte_offset: usize) -> tree_sitter::Point {
         }
     }
     tree_sitter::Point { row, column }
+}
+
+/// Walks `bytes` from `start`, tracking row/column, to find the position
+/// where it ends - used for `new_end_position` since the replacement
+/// hasn't been parsed into a tree yet.
+fn advance_point(start: tree_sitter::Point, bytes: &[u8]) -> tree_sitter::Point {
+    let mut point = start;
+    for &b in bytes {
+        if b == b'\n' {
+            point.row += 1;
+            point.column = 0;
+        } else {
+            point.column += 1;
+        }
+    }
+    point
 }
 
 impl ParsedCode {
