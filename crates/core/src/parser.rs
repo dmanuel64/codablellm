@@ -186,20 +186,38 @@ fn point_at(bytes: &[u8], byte_offset: usize) -> tree_sitter::Point {
     tree_sitter::Point { row, column }
 }
 
+impl ParsedCode {
+    /// Like `TryFrom<&Path>`, but resolves ambiguous `.h` files as C++
+    /// instead of C when `headers_as_cpp` is set (`Language::from_path`
+    /// always resolves `.h` to C, since C is declared before C++ and both
+    /// languages claim that extension).
+    pub fn try_from_path_with_options(value: &Path, headers_as_cpp: bool) -> Result<Self, Error> {
+        let Some(language) = Language::from_path(value) else {
+            return Err(Error::UnknownLanguage {
+                file: value.to_path_buf(),
+            });
+        };
+        let is_header = value
+            .extension()
+            .map(|ext| ext.eq_ignore_ascii_case("h"))
+            .unwrap_or(false);
+        let language = if headers_as_cpp && language == Language::C && is_header {
+            Language::Cpp
+        } else {
+            language
+        };
+        let text = fs::read(value).map_err(|e| Error::Parse {
+            path: Some(value.to_path_buf()),
+            source: Some(e),
+        })?;
+        Self::new(language, text, Some(value.to_path_buf()))
+    }
+}
+
 impl TryFrom<&Path> for ParsedCode {
     type Error = Error;
 
     fn try_from(value: &Path) -> Result<Self, Self::Error> {
-        if let Some(language) = Language::from_path(value) {
-            let text = fs::read(value).map_err(|e| Error::Parse {
-                path: Some(value.to_path_buf()),
-                source: Some(e),
-            })?;
-            Self::new(language, text, Some(value.to_path_buf()))
-        } else {
-            Err(Error::UnknownLanguage {
-                file: value.to_path_buf(),
-            })
-        }
+        Self::try_from_path_with_options(value, false)
     }
 }

@@ -147,11 +147,10 @@ fn extract_inner(
 fn extract_file(
     path: &Path,
     transform: Option<&Transform>,
-    // TODO: wire this into ParsedCode::new so ambiguous .h files can be
-    // parsed as C++ instead of C.
-    _headers_as_cpp: bool,
+    headers_as_cpp: bool,
 ) -> Result<Vec<Function>, Error> {
-    let mut parsed_functions: ParsedFunctions = ParsedCode::try_from(path)?.into();
+    let mut parsed_functions: ParsedFunctions =
+        ParsedCode::try_from_path_with_options(path, headers_as_cpp)?.into();
     if let Some(t) = transform {
         parsed_functions.edit(|f| match t.apply(f) {
             Ok(new_function) if new_function.is_changed() => {

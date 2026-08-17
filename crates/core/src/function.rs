@@ -196,7 +196,7 @@ impl Function {
     pub fn language(&self) -> String {
         match self {
             Function::Source { language, .. } => language.to_string(),
-            Function::Decompiled { .. } => String::from("C"),
+            Function::Decompiled { .. } => String::from("Pseudo-C"),
             Function::Assembly { .. } => String::from("Assembly"),
         }
     }
@@ -381,7 +381,22 @@ impl ParsedFunctions {
         // inside the loop below without conflicting with the loop's own
         // borrow of `functions`.
         let Self { code, functions } = self;
-        for function in functions {
+
+        // Process back-to-front by byte position so editing one function
+        // never shifts the still-stale offsets of another we haven't
+        // gotten to yet.
+        let mut order: Vec<usize> = (0..functions.len()).collect();
+        order.sort_unstable_by_key(|&i| {
+            std::cmp::Reverse(match &functions[i] {
+                Function::Source { location, .. } | Function::Assembly { location, .. } => {
+                    location.bytes_range.start
+                }
+                Function::Decompiled { .. } => 0,
+            })
+        });
+
+        for i in order {
+            let function = &mut functions[i];
             let old_definition = function.definition().to_string();
             e(function);
             if function.definition() != old_definition {
