@@ -238,15 +238,27 @@ impl Function {
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}::{}",
-            self.source()
-                .and_then(Path::file_name)
-                .map(OsStr::to_string_lossy)
-                .unwrap_or_else(|| String::from("<LOCAL>").into()),
-            self.name()
-        )
+        match self {
+            Function::Source { location, .. } | Function::Assembly { location, .. } => write!(
+                f,
+                "{}::{}:{}",
+                self.source()
+                    .and_then(Path::file_name)
+                    .map(OsStr::to_string_lossy)
+                    .unwrap_or_else(|| String::from("<MEM>").into()),
+                self.name(),
+                location.line_range.start
+            ),
+            Function::Decompiled { .. } => write!(
+                f,
+                "{}::{}",
+                self.source()
+                    .and_then(Path::file_name)
+                    .map(OsStr::to_string_lossy)
+                    .unwrap_or_else(|| String::from("<MEM>").into()),
+                self.name(),
+            ),
+        }
     }
 }
 
