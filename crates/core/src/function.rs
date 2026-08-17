@@ -7,8 +7,12 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tree_sitter::StreamingIterator;
 
-use crate::{Language, parser::ParsedCode};
+use crate::{
+    Language,
+    parser::{Error, ParsedCode},
+};
 
 const C_FUNCTION_SEXP: &str = r#"
         (function_definition
@@ -298,6 +302,10 @@ impl ParsedFunctions {
         }
     }
 
+    pub fn code(&self) -> &ParsedCode {
+        &self.code
+    }
+
     fn functions_inner(&mut self) -> Result<Vec<Function>, Error> {
         let sexp = match self.code.language() {
             Language::C => C_FUNCTION_SEXP,
@@ -311,25 +319,17 @@ impl ParsedFunctions {
             Language::CSharp => CSHARP_FUNCTION_SEXP,
         };
 
-        let language = self.code.language();
+        let language = *self.code.language();
         let source = self.code.source.clone();
-        let code = self.code.code().clone();
+        let code = self.code.code().to_vec();
 
-        let name_idx = self
-            .code
-            .query
-            .as_ref()
-            .expect("query to be populated")
+        let (query, mut matches) = self.code.query(sexp)?;
+        let name_idx = query
             .capture_index_for_name("name")
             .expect("The s-expression to contain the name capture group");
-        let definition_idx = self
-            .code
-            .query
-            .as_ref()
-            .expect("query to be populated")
+        let definition_idx = query
             .capture_index_for_name("definition")
             .expect("The s-expression to contain the definition capture group");
-        let mut matches = self.code.query(sexp)?;
         let mut functions = Vec::new();
         while let Some(m) = matches.next() {
             let name_capture = m.captures.iter().find(|c| c.index == name_idx);
@@ -353,7 +353,7 @@ impl ParsedFunctions {
                     name,
                     definition,
                     source.clone(),
-                    *language,
+                    language,
                     bytes_range,
                     line_range,
                     column_range,
@@ -370,23 +370,34 @@ impl ParsedFunctions {
         Ok(&self.functions)
     }
 
-    fn functions_mut(&mut self) -> Result<&mut Vec<Function>, Error> {
-        if self.functions.is_empty() {
-            self.functions = self.functions_inner()?;
-        }
-        Ok(&mut self.functions)
-    }
-
-    pub fn edit_functions<EditFn>(&mut self, e: EditFn) -> Result<(), Error>
+    pub fn edit<EditFn>(&mut self, e: EditFn) -> Result<(), Error>
     where
         EditFn: Fn(&mut Function),
     {
-        for function in self.functions_mut()? {
+        if self.functions.is_empty() {
+            self.functions = self.functions_inner()?;
+        }
+        // Split into disjoint borrows so `code.edit()` can run per-function
+        // inside the loop below without conflicting with the loop's own
+        // borrow of `functions`.
+        let Self { code, functions } = self;
+        for function in functions {
             let old_definition = function.definition().to_string();
             e(function);
-            let is_changed = old_definition == function.definition();
-            if is_changed {
-                self.code.edit(|bytes| {})?;
+            if function.definition() != old_definition {
+                let start = match function {
+                    Function::Source { location, .. } | Function::Assembly { location, .. } => {
+                        Some(location.bytes_range.start)
+                    }
+                    Function::Decompiled { .. } => None,
+                };
+                if let Some(start) = start {
+                    let end = start + old_definition.len();
+                    let new_definition = function.definition().to_string();
+                    code.edit(|bytes| {
+                        bytes.splice(start..end, new_definition.into_bytes());
+                    })?;
+                }
             }
         }
         Ok(())

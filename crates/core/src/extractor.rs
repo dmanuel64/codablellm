@@ -2,48 +2,30 @@ use indicatif::{HumanCount, ParallelProgressIterator};
 use rayon::prelude::*;
 use std::{
     borrow::Cow,
-    cell::{Cell, RefCell},
-    ffi::OsStr,
-    fs, io,
     path::{Path, PathBuf},
-    str::Utf8Error,
 };
 use thiserror::Error;
-use tree_sitter::StreamingIterator;
 
 use crate::{
     ProgressDisplay,
-    function::{self, Function, ParsedFunctions},
-    language::Language,
-    parser::ParsedCode,
+    function::{Function, ParsedFunctions},
+    parser::{self, ParsedCode},
     repo::Repository,
 };
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("failed to parse source code: {}",
-    path.as_ref().map(|p| p.as_display().to_string()).unwrap_or_else(|| "<UNKNOWN>".into()))]
-    Parse {
-        path: Option<PathBuf>,
-        #[source]
-        source: Option<io::Error>,
-    },
-    #[error("failed to decode source code")]
-    Decode(#[from] Utf8Error),
+    #[error(transparent)]
+    Parser(#[from] parser::Error),
     #[error("failed to transform function '{}': {source}", function.name())]
     Transform {
         function: Function,
         source: anyhow::Error,
     },
-    #[error("Failed to recognize language from source code file: {}",
-    file.file_name().map(|n| n.to_string_lossy()).unwrap_or_else(|| "<UNKNOWN>".into()))]
-    UnknownLanguage { file: PathBuf },
-    #[error("failed to query S-expression")]
-    Query(#[source] tree_sitter::QueryError),
 }
 
 pub enum Transform {
-    Native(Box<dyn for<'a> Fn(&'a Function) -> anyhow::Result<MaybeChangedFunction<'a>> + Send>),
+    Native(Box<dyn for<'a> Fn(&'a Function) -> anyhow::Result<MaybeChangedFunction<'a>> + Send + Sync>),
     #[cfg(feature = "rhai")]
     Rhai {
         file: PathBuf,
@@ -136,40 +118,52 @@ fn extract_inner(
             HumanCount(num_files as u64)
         )
     }
-    repo.source_files()
+    let functions = repo
+        .source_files()
         .par_bridge()
         .progress_with(progress)
         .map(|path| {
-            let mut functions = Vec::new();
             tracing::debug!(file = %path.display(), "Extracting source code file");
             match extract_file(&path, transform, *headers_as_cpp) {
-                Ok(f) => functions.extend(f),
+                Ok(f) => f,
+                Err(Error::Parser(parser::Error::UnknownLanguage { file })) => {
+                    tracing::warn!(
+                        file = %file.display(),
+                        "Failed to recognize language from file"
+                    );
+                    Vec::new()
+                }
                 Err(error) => {
-                    if let Error::UnknownLanguage { file } = error {
-                        tracing::warn!(
-                            file = %file.display(),
-                            "Failed to recognize language from file"
-                        );
-                    } else {
-                        tracing::warn!(?error, file = %path.display(), "Failed to extract source code functions");
-                    }
+                    tracing::warn!(?error, file = %path.display(), "Failed to extract source code functions");
+                    Vec::new()
                 }
             }
-            Ok(functions)
-        }).flatten().collect()
+        })
+        .flatten()
+        .collect();
+    Ok(functions)
 }
 
 fn extract_file(
     path: &Path,
     transform: Option<&Transform>,
-    headers_as_cpp: bool,
+    // TODO: wire this into ParsedCode::new so ambiguous .h files can be
+    // parsed as C++ instead of C.
+    _headers_as_cpp: bool,
 ) -> Result<Vec<Function>, Error> {
-    let parsed_functions: ParsedFunctions = ParsedCode::try_from(path)?.into();
+    let mut parsed_functions: ParsedFunctions = ParsedCode::try_from(path)?.into();
     if let Some(t) = transform {
-        parsed_functions.edit_functions(|f| {
-            let r = t.apply(f).unwrap();
-            if r.is_changed() {}
-        });
+        parsed_functions.edit(|f| match t.apply(f) {
+            Ok(new_function) if new_function.is_changed() => {
+                let new_name = new_function.name().to_string();
+                let new_definition = new_function.definition().to_string();
+                f.edit(Some(new_name), new_definition);
+            }
+            Ok(_) => {}
+            Err(error) => {
+                tracing::warn!(?error, function = %f, "Failed to apply transform to function");
+            }
+        })?;
     }
-    parsed_functions.functions()
+    Ok(parsed_functions.functions()?.to_vec())
 }

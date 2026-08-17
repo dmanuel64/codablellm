@@ -1,11 +1,14 @@
 use std::{
     cell::RefCell,
     ffi::OsStr,
-    fs,
+    fs, io,
     path::{Path, PathBuf},
+    str::Utf8Error,
 };
 
-use crate::{Language, function::Function};
+use thiserror::Error as ThisError;
+
+use crate::Language;
 
 thread_local! {
     static PARSER: RefCell<tree_sitter::Parser> = RefCell::new({
@@ -13,12 +16,30 @@ thread_local! {
     });
 }
 
+#[derive(Debug, ThisError)]
+pub enum Error {
+    #[error("failed to parse source code: {}",
+    path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "<UNKNOWN>".into()))]
+    Parse {
+        path: Option<PathBuf>,
+        #[source]
+        source: Option<io::Error>,
+    },
+    #[error("failed to decode source code")]
+    Decode(#[from] Utf8Error),
+    #[error("Failed to recognize language from source code file: {}",
+    file.file_name().map(|n| n.to_string_lossy()).unwrap_or_else(|| "<UNKNOWN>".into()))]
+    UnknownLanguage { file: PathBuf },
+    #[error("failed to query S-expression")]
+    Query(#[source] tree_sitter::QueryError),
+}
+
 pub struct ParsedCode {
     tree: tree_sitter::Tree,
     language: Language,
     code: Vec<u8>,
     pub source: Option<PathBuf>,
-    pub(super) query: Option<tree_sitter::Query>,
+    query: Option<tree_sitter::Query>,
     cursor: tree_sitter::QueryCursor,
 }
 
@@ -76,17 +97,28 @@ impl ParsedCode {
         &self.code
     }
 
+    /// Compiles `sexp` and runs it against the parsed tree, returning both
+    /// the compiled query (so callers can look up capture indices) and the
+    /// resulting matches. Both borrow `self` for `'a`, so no further access
+    /// to `self` is possible until the caller is done with them - grab
+    /// anything else you need from `self` before calling this.
     pub fn query<'a>(
         &'a mut self,
         sexp: &str,
-    ) -> Result<tree_sitter::QueryMatches<'a, 'a, &[u8], &[u8]>, Error> {
+    ) -> Result<
+        (
+            &'a tree_sitter::Query,
+            tree_sitter::QueryMatches<'a, 'a, &'a [u8], &'a [u8]>,
+        ),
+        Error,
+    > {
         let root_node = self.tree.root_node();
-        let compiled =
-            tree_sitter::Query::new(&root_node.language(), sexp).map_err(|e| Error::Query(e))?;
+        let compiled = tree_sitter::Query::new(&root_node.language(), sexp).map_err(Error::Query)?;
         self.query = Some(compiled);
-        Ok(self
-            .cursor
-            .matches(self.query.as_ref().unwrap(), root_node, self.code()))
+        let Self { query, cursor, code, .. } = self;
+        let query_ref = query.as_ref().expect("query was just set");
+        let matches = cursor.matches(query_ref, root_node, code.as_slice());
+        Ok((query_ref, matches))
     }
 
     pub fn edit<EditFn>(&mut self, e: EditFn) -> Result<(), Error>
@@ -158,7 +190,7 @@ impl TryFrom<&Path> for ParsedCode {
     type Error = Error;
 
     fn try_from(value: &Path) -> Result<Self, Self::Error> {
-        if let Some(language) = Language::from_path(&value) {
+        if let Some(language) = Language::from_path(value) {
             let text = fs::read(value).map_err(|e| Error::Parse {
                 path: Some(value.to_path_buf()),
                 source: Some(e),
