@@ -48,8 +48,26 @@ pub fn parse(language: Language, text: impl Into<Vec<u8>>) -> Result<ParsedCode,
     ParsedCode::new(language, text, None)
 }
 
-pub fn parse_file(file: &Path) -> Result<ParsedCode, Error> {
-    ParsedCode::try_from(file)
+pub fn parse_file(file: &Path, headers_as_cpp: bool) -> Result<ParsedCode, Error> {
+    let Some(language) = Language::from_path(file) else {
+        return Err(Error::UnknownLanguage {
+            file: file.to_path_buf(),
+        });
+    };
+    let is_header = file
+        .extension()
+        .map(|ext| ext.eq_ignore_ascii_case("h"))
+        .unwrap_or(false);
+    let language = if headers_as_cpp && language == Language::C && is_header {
+        Language::Cpp
+    } else {
+        language
+    };
+    let text = fs::read(file).map_err(|e| Error::Parse {
+        path: Some(file.to_path_buf()),
+        source: Some(e),
+    })?;
+    ParsedCode::new(language, text, Some(file.to_path_buf()))
 }
 
 impl ParsedCode {
@@ -114,9 +132,15 @@ impl ParsedCode {
         Error,
     > {
         let root_node = self.tree.root_node();
-        let compiled = tree_sitter::Query::new(&root_node.language(), sexp).map_err(Error::Query)?;
+        let compiled =
+            tree_sitter::Query::new(&root_node.language(), sexp).map_err(Error::Query)?;
         self.query = Some(compiled);
-        let Self { query, cursor, code, .. } = self;
+        let Self {
+            query,
+            cursor,
+            code,
+            ..
+        } = self;
         let query_ref = query.as_ref().expect("query was just set");
         let matches = cursor.matches(query_ref, root_node, code.as_slice());
         Ok((query_ref, matches))
@@ -200,40 +224,4 @@ fn advance_point(start: tree_sitter::Point, bytes: &[u8]) -> tree_sitter::Point 
         }
     }
     point
-}
-
-impl ParsedCode {
-    /// Like `TryFrom<&Path>`, but resolves ambiguous `.h` files as C++
-    /// instead of C when `headers_as_cpp` is set (`Language::from_path`
-    /// always resolves `.h` to C, since C is declared before C++ and both
-    /// languages claim that extension).
-    pub fn try_from_path_with_options(value: &Path, headers_as_cpp: bool) -> Result<Self, Error> {
-        let Some(language) = Language::from_path(value) else {
-            return Err(Error::UnknownLanguage {
-                file: value.to_path_buf(),
-            });
-        };
-        let is_header = value
-            .extension()
-            .map(|ext| ext.eq_ignore_ascii_case("h"))
-            .unwrap_or(false);
-        let language = if headers_as_cpp && language == Language::C && is_header {
-            Language::Cpp
-        } else {
-            language
-        };
-        let text = fs::read(value).map_err(|e| Error::Parse {
-            path: Some(value.to_path_buf()),
-            source: Some(e),
-        })?;
-        Self::new(language, text, Some(value.to_path_buf()))
-    }
-}
-
-impl TryFrom<&Path> for ParsedCode {
-    type Error = Error;
-
-    fn try_from(value: &Path) -> Result<Self, Self::Error> {
-        Self::try_from_path_with_options(value, false)
-    }
 }
