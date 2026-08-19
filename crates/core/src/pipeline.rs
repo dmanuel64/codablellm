@@ -1,7 +1,6 @@
 use std::{
-    borrow::Cow,
     collections::HashSet,
-    ffi::OsStr,
+    io,
     path::{Path, PathBuf},
     sync::{Arc, LazyLock},
 };
@@ -9,7 +8,7 @@ use std::{
 use indicatif::{MultiProgress, ProgressBar};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumCount, EnumIter, IntoEnumIterator};
-use tempfile::env::temp_dir;
+use tempfile::{NamedTempFile, env::temp_dir};
 use thiserror::Error;
 use tokio::fs;
 use tracing::instrument;
@@ -35,6 +34,8 @@ pub enum Error {
     Extractor(#[from] extractor::Error),
     #[error(transparent)]
     Builder(#[from] builder::Error),
+    #[error(transparent)]
+    Io(#[from] io::Error),
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Display, Default, EnumCount, EnumIter)]
@@ -90,7 +91,11 @@ impl Mode {
 pub struct Options<'a> {
     pub display_progress: bool,
     pub dry_run: bool,
+    pub cache_dir: Option<&'a Path>,
+    pub save_transformed_repos: bool,
+    pub transform_in_place: bool,
     pub state_dir: Option<&'a Path>,
+    pub save_state: bool,
     pub extractor_options: extractor::Options,
     pub decompiler_options: decompiler::Options,
     pub mapper_options: mapper::Options,
@@ -99,16 +104,18 @@ pub struct Options<'a> {
 
 impl Default for Options<'_> {
     fn default() -> Self {
-        static TEMP_DIR: LazyLock<PathBuf> = LazyLock::new(|| temp_dir());
-
         Self {
             display_progress: true,
             dry_run: false,
-            state_dir: Some(&TEMP_DIR),
+            cache_dir: None,
+            state_dir: None,
             extractor_options: extractor::Options::default(),
             decompiler_options: decompiler::Options::default(),
             mapper_options: mapper::Options::default(),
             dataset_options: dataset::Options::default(),
+            save_transformed_repos: false,
+            save_state: true,
+            transform_in_place: false,
         }
     }
 }
@@ -142,10 +149,16 @@ where
         .file_name()
         .map(|s| s.to_string_lossy())
         .ok_or_else(|| Error::InvalidRepoPath(path.as_ref().to_path_buf()))?;
-    let mut state = State::default();
-    let state_path = options
+    let state_file = options
         .state_dir
-        .map(|s| s.join(format!("{repo_name}.state.json")));
+        .map_or_else(NamedTempFile::new, NamedTempFile::new_in)?;
+    let state_path = if options.save_state {
+        let (_, p) = state_file.keep().expect("TODO make error");
+        p
+    } else {
+        state_file.path().to_path_buf()
+    };
+    let mut state = State::default();
 
     // Create progress bars
     let overall_progress = Arc::new(MultiProgress::new());
@@ -183,25 +196,22 @@ where
             Stage::MapCode => todo!(),
             Stage::CreateDataset => todo!(),
         }
-        if let Some(ref s) = state_path {
-            // Save current pipeline state
-            tracing::debug!(file = ?s, "Saving current pipeline state");
-            tracing::trace!(?state);
-            match serde_json::to_string(&state) {
-                Ok(state_json) => {
-                    if let Err(error) = fs::write(s, state_json).await {
-                        tracing::warn!(?error, file = %s.display(), "Failed to save pipeline state");
-                    }
+        // Save current pipeline state
+        tracing::debug!(file = ?state_path, "Saving current pipeline state");
+        tracing::trace!(?state);
+
+        match serde_json::to_string(&state) {
+            Ok(state_json) => {
+                if let Err(error) = fs::write(&state_path, state_json).await {
+                    tracing::warn!(?error, file = %state_path.display(), "Failed to save pipeline state");
                 }
-                Err(error) => {
-                    tracing::warn!(?error, file = %s.display(), "Failed to serialize pipeline state");
-                }
+            }
+            Err(error) => {
+                tracing::warn!(?error, file = %state_path.display(), "Failed to serialize pipeline state");
             }
         }
     }
-    if let Some(s) = state_path
-        && let Err(error) = fs::remove_file(s).await
-    {
+    if let Err(error) = fs::remove_file(state_path).await {
         tracing::warn!(?error, "Failed to remove pipeline state")
     }
     todo!()

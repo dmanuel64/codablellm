@@ -2,7 +2,7 @@ use std::{num::NonZeroUsize, path::PathBuf, sync::OnceLock};
 
 use clap::{Args, ValueEnum};
 use codablellm_core::{
-    BinaryMode, Dataset, Language, Mode, Options, dataset, decompiler, extractor, mapper,
+    BinaryMode, Dataset, Language, Mode, Options, Transform, dataset, decompiler, extractor, mapper,
 };
 use color_eyre::eyre::Result;
 use inquire::required;
@@ -107,6 +107,12 @@ pub struct CreateDatasetArgs {
     #[arg(help_heading = DECOMPILER_OPTS_HEADING, long, requires = "binaries")]
     decompiler_jobs: Option<NonZeroUsize>,
 
+    #[arg(short, help_heading = EXTRACTOR_OPTS_HEADING, long, aliases = ["transform"])]
+    transforms: Vec<PathBuf>,
+
+    #[arg(help_heading = EXTRACTOR_OPTS_HEADING, long, requires = "transforms")]
+    in_place: bool,
+
     #[arg(help_heading = DATASET_OPTS_HEADING, long)]
     scripts: Vec<PathBuf>,
 
@@ -133,6 +139,8 @@ impl IntoResolved for CreateDatasetArgs {
             strip,
             representations,
             force,
+            in_place,
+            transforms,
             output,
             include,
             exclude,
@@ -342,7 +350,8 @@ pub async fn create_dataset(
         &Options {
             display_progress,
             dry_run,
-            state_dir: Some(&storage::CACHE_DIR),
+            cache_dir: Some(&storage::CACHE_DIR),
+            state_dir: Some(&storage::STATE_DIR),
             ..Default::default()
         },
     )
