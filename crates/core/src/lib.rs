@@ -15,7 +15,6 @@ pub(crate) mod utils;
 
 pub use dataset::{BinaryDataset, Dataset, SourceDataset};
 pub use extractor::Transform;
-pub use language::Language;
 pub use pipeline::{BinaryMode, Error as CodablellmError, Mode, Options, run, run_with_options};
 pub use repo::Repository;
 pub use utils::ProgressDisplay;

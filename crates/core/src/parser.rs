@@ -1,6 +1,5 @@
 use std::{
     cell::RefCell,
-    ffi::OsStr,
     fs, io,
     ops::Range,
     path::{Path, PathBuf},
@@ -9,7 +8,7 @@ use std::{
 
 use thiserror::Error as ThisError;
 
-use crate::Language;
+use crate::language::{self, Language};
 
 thread_local! {
     static PARSER: RefCell<tree_sitter::Parser> = RefCell::new({
@@ -28,70 +27,113 @@ pub enum Error {
     },
     #[error("failed to decode source code")]
     Decode(#[from] Utf8Error),
-    #[error("Failed to recognize language from source code file: {}",
+    #[error("File is not a {language} source code file: {}",
     file.file_name().map(|n| n.to_string_lossy()).unwrap_or_else(|| "<UNKNOWN>".into()))]
-    UnknownLanguage { file: PathBuf },
+    InvalidSourceCodeFile { language: String, file: PathBuf },
     #[error("failed to query S-expression")]
     Query(#[source] tree_sitter::QueryError),
 }
 
-pub struct ParsedCode {
+impl From<language::C> for tree_sitter::Language {
+    fn from(_value: language::C) -> Self {
+        tree_sitter_c::LANGUAGE.into()
+    }
+}
+
+impl From<language::Cpp> for tree_sitter::Language {
+    fn from(_value: language::Cpp) -> Self {
+        tree_sitter_cpp::LANGUAGE.into()
+    }
+}
+
+impl From<language::Python> for tree_sitter::Language {
+    fn from(_value: language::Python) -> Self {
+        tree_sitter_python::LANGUAGE.into()
+    }
+}
+
+impl From<language::JavaScript> for tree_sitter::Language {
+    fn from(_value: language::JavaScript) -> Self {
+        tree_sitter_javascript::LANGUAGE.into()
+    }
+}
+
+impl From<language::TypeScript> for tree_sitter::Language {
+    fn from(value: language::TypeScript) -> Self {
+        if value.include_tsx {
+            tree_sitter_typescript::LANGUAGE_TSX.into()
+        } else {
+            tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
+        }
+    }
+}
+
+impl From<language::Go> for tree_sitter::Language {
+    fn from(_value: language::Go) -> Self {
+        tree_sitter_go::LANGUAGE.into()
+    }
+}
+
+impl From<language::Rust> for tree_sitter::Language {
+    fn from(_value: language::Rust) -> Self {
+        tree_sitter_rust::LANGUAGE.into()
+    }
+}
+
+impl From<language::Java> for tree_sitter::Language {
+    fn from(_value: language::Java) -> Self {
+        tree_sitter_java::LANGUAGE.into()
+    }
+}
+
+impl From<language::CSharp> for tree_sitter::Language {
+    fn from(_value: language::CSharp) -> Self {
+        tree_sitter_c_sharp::LANGUAGE.into()
+    }
+}
+
+pub struct ParsedCode<L: Language> {
     tree: tree_sitter::Tree,
-    language: Language,
+    language: L,
     code: Vec<u8>,
     pub source: Option<PathBuf>,
     query: Option<tree_sitter::Query>,
     cursor: tree_sitter::QueryCursor,
 }
 
-pub fn parse(language: Language, text: impl Into<Vec<u8>>) -> Result<ParsedCode, Error> {
+pub fn parse<L>(language: L, text: impl Into<Vec<u8>>) -> Result<ParsedCode<L>, Error>
+where
+    L: Language + Into<tree_sitter::Language> + Clone + Copy,
+{
     ParsedCode::new(language, text, None)
 }
 
-pub fn parse_file(file: &Path, headers_as_cpp: bool) -> Result<ParsedCode, Error> {
-    let Some(language) = Language::from_path(file) else {
-        return Err(Error::UnknownLanguage {
+pub fn parse_file<L, P>(language: L, file: &Path) -> Result<ParsedCode<L>, Error>
+where
+    L: Language + Into<tree_sitter::Language> + Clone + Copy,
+{
+    if !language.is_source_file(file) {
+        return Err(Error::InvalidSourceCodeFile {
             file: file.to_path_buf(),
+            language: language.name().to_string(),
         });
-    };
-    let is_header = file
-        .extension()
-        .map(|ext| ext.eq_ignore_ascii_case("h"))
-        .unwrap_or(false);
-    let language = if headers_as_cpp && language == Language::C && is_header {
-        Language::Cpp
-    } else {
-        language
-    };
-    let text = fs::read(file).map_err(|e| Error::Parse {
+    }
+    let text = fs::read(&file).map_err(|e| Error::Parse {
         path: Some(file.to_path_buf()),
         source: Some(e),
     })?;
     ParsedCode::new(language, text, Some(file.to_path_buf()))
 }
 
-impl ParsedCode {
-    pub fn new(
-        language: Language,
-        text: impl Into<Vec<u8>>,
-        source: Option<PathBuf>,
-    ) -> Result<Self, Error> {
+impl<L> ParsedCode<L>
+where
+    L: Language + Into<tree_sitter::Language> + Clone + Copy,
+{
+    fn new(language: L, text: impl Into<Vec<u8>>, source: Option<PathBuf>) -> Result<Self, Error> {
         let code = text.into();
         let tree = PARSER.with_borrow_mut(|parser| {
             parser
-                .set_language(&if let Language::TypeScript = language
-                    && source
-                        .as_ref()
-                        .map(PathBuf::as_path)
-                        .and_then(Path::extension)
-                        .map(OsStr::to_string_lossy)
-                        .map(|ext| ext.eq_ignore_ascii_case("tsx"))
-                        .unwrap_or_default()
-                {
-                    tree_sitter_typescript::LANGUAGE_TSX.into()
-                } else {
-                    language.into()
-                })
+                .set_language(&language.into())
                 .expect("the language to be set correctly for the parser");
             parser.parse(&code, None).ok_or_else(|| Error::Parse {
                 path: None,
@@ -108,7 +150,7 @@ impl ParsedCode {
         })
     }
 
-    pub fn language(&self) -> &Language {
+    pub fn language(&self) -> &L {
         &self.language
     }
 

@@ -1,77 +1,178 @@
-use std::path::Path;
+use std::{any::Any, ffi::OsStr, path::Path};
 
-use serde::{Deserialize, Serialize};
-use strum::{Display, EnumIter, IntoEnumIterator};
+pub trait Language: Any + Send + Sync {
+    fn name(&self) -> &str;
+    fn file_extensions(&self) -> Vec<&str>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, EnumIter)]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase", ascii_case_insensitive)]
-#[cfg_attr(
-    feature = "value-enums",
-    derive(clap::ValueEnum),
-    clap(rename_all = "lowercase")
-)]
-pub enum Language {
-    C,
-    #[strum(serialize = "c++")]
-    #[cfg_attr(feature = "value-enums", clap(name = "c++"), serde(rename = "c++"))]
-    Cpp,
-    Python,
-    JavaScript,
-    TypeScript,
-    Go,
-    Rust,
-    Java,
-    #[strum(serialize = "c#")]
-    #[cfg_attr(feature = "value-enums", clap(name = "c#"), serde(rename = "c#"))]
-    CSharp,
-}
-
-impl Language {
-    pub fn file_extensions(&self) -> &'static [&'static str] {
-        match self {
-            Language::C => &["c", "h"],
-            Language::Cpp => &["cpp", "cxx", "cc", "c++", "hpp", "hxx", "hh", "h++", "h"],
-            Language::Python => &["py", "pyw"],
-            Language::JavaScript => &["js", "mjs", "cjs", "jsx"],
-            Language::TypeScript => &["ts", "tsx"],
-            Language::Go => &["go"],
-            Language::Rust => &["rs"],
-            Language::Java => &["java"],
-            Language::CSharp => &["cs"],
+    fn is_source_file(&self, path: &Path) -> bool {
+        if let Some(ext) = path.extension().and_then(OsStr::to_str) {
+            self.file_extensions()
+                .iter()
+                .find(|e| e.contains(ext))
+                .is_some()
+        } else {
+            false
         }
-    }
-
-    pub fn is_compiled(&self) -> bool {
-        match self {
-            Language::C
-            | Language::Cpp
-            | Language::Rust
-            | Language::Go
-            | Language::Java
-            | Language::CSharp => true,
-            Language::Python | Language::JavaScript | Language::TypeScript => false,
-        }
-    }
-
-    pub fn from_path(path: &Path) -> Option<Language> {
-        let ext = path.extension()?.to_str()?;
-        Self::iter().find(|l| l.file_extensions().contains(&ext))
     }
 }
 
-impl From<Language> for tree_sitter::Language {
-    fn from(value: Language) -> Self {
-        match value {
-            Language::C => tree_sitter_c::LANGUAGE.into(),
-            Language::Cpp => tree_sitter_cpp::LANGUAGE.into(),
-            Language::Python => tree_sitter_python::LANGUAGE.into(),
-            Language::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
-            Language::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
-            Language::Go => tree_sitter_go::LANGUAGE.into(),
-            Language::Rust => tree_sitter_rust::LANGUAGE.into(),
-            Language::Java => tree_sitter_java::LANGUAGE.into(),
-            Language::CSharp => tree_sitter_c_sharp::LANGUAGE.into(),
+#[derive(Debug, Clone, Copy)]
+pub struct C;
+
+impl Language for C {
+    fn name(&self) -> &str {
+        "C"
+    }
+
+    fn file_extensions(&self) -> Vec<&str> {
+        vec!["c", "h"]
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Cpp {
+    pub include_h_files: bool,
+}
+
+impl Language for Cpp {
+    fn name(&self) -> &str {
+        "C++"
+    }
+
+    fn file_extensions(&self) -> Vec<&str> {
+        let mut exts = vec!["cpp", "cxx", "cc", "c++", "hpp", "hxx", "hh", "h++"];
+        if self.include_h_files {
+            exts.push("h");
         }
+        exts
+    }
+}
+
+impl Default for Cpp {
+    fn default() -> Self {
+        Self {
+            include_h_files: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Python;
+
+impl Language for Python {
+    fn name(&self) -> &str {
+        "Python"
+    }
+
+    fn file_extensions(&self) -> Vec<&str> {
+        vec!["py", "pyw"]
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct JavaScript {
+    pub include_jsx_files: bool,
+    pub include_mjs_files: bool,
+    pub include_cjs_files: bool,
+}
+
+impl Language for JavaScript {
+    fn name(&self) -> &str {
+        "JavaScript"
+    }
+
+    fn file_extensions(&self) -> Vec<&str> {
+        let mut exts = vec!["js"];
+        if self.include_jsx_files {
+            exts.push("jsx");
+        }
+        if self.include_mjs_files {
+            exts.push("mjs");
+        }
+        if self.include_cjs_files {
+            exts.push("cjs");
+        }
+        exts
+    }
+}
+
+impl Default for JavaScript {
+    fn default() -> Self {
+        Self {
+            include_jsx_files: true,
+            include_mjs_files: true,
+            include_cjs_files: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TypeScript {
+    pub include_tsx: bool,
+}
+
+impl Language for TypeScript {
+    fn name(&self) -> &str {
+        "TypeScript"
+    }
+
+    fn file_extensions(&self) -> Vec<&str> {
+        let mut exts = vec!["ts"];
+        if self.include_tsx {
+            exts.push("tsx");
+        }
+        exts
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Go;
+
+impl Language for Go {
+    fn name(&self) -> &str {
+        "Go"
+    }
+
+    fn file_extensions(&self) -> Vec<&str> {
+        vec!["go"]
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Rust;
+
+impl Language for Rust {
+    fn name(&self) -> &str {
+        "Rust"
+    }
+
+    fn file_extensions(&self) -> Vec<&str> {
+        vec!["rs"]
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Java;
+
+impl Language for Java {
+    fn name(&self) -> &str {
+        "Java"
+    }
+
+    fn file_extensions(&self) -> Vec<&str> {
+        vec!["java"]
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CSharp;
+
+impl Language for CSharp {
+    fn name(&self) -> &str {
+        "C#"
+    }
+
+    fn file_extensions(&self) -> Vec<&str> {
+        vec!["cs"]
     }
 }
