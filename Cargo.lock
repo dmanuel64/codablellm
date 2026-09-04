@@ -911,7 +911,7 @@ dependencies = [
 
 [[package]]
 name = "codablellm-core"
-version = "2.0.0"
+version = "2.0.0-alpha.1"
 dependencies = [
  "anyhow",
  "bollard",
@@ -944,7 +944,7 @@ dependencies = [
 
 [[package]]
 name = "codablellm-pyo3"
-version = "2.0.0"
+version = "2.0.0-alpha.1"
 dependencies = [
  "codablellm-core",
  "pyo3",

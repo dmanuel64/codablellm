@@ -15,7 +15,10 @@ name = "codablellm"
 path = "src/main.rs"
 
 [dependencies]
-codablellm-core = { workspace = true, features = ["rhai", "value-enums"] }
+codablellm-core = { path = "../core", version = "2.0.0-alpha.1", features = [
+    "rhai",
+    "value-enums",
+] }
 
 color-eyre.workspace = true
 human-panic.workspace = true
