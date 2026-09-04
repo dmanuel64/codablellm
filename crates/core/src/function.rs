@@ -35,6 +35,20 @@ pub struct SourceFunction<L: Language> {
     column_range: Range<usize>,
 }
 
+impl<L: Language + Clone> SourceFunction<L> {
+    pub fn as_any(&self) -> AnySourceFunction {
+        AnySourceFunction {
+            name: self.name.clone(),
+            definition: self.definition.clone(),
+            source: self.source.clone(),
+            language: Box::new(self.language.clone()),
+            bytes_range: self.bytes_range.clone(),
+            line_range: self.line_range.clone(),
+            column_range: self.column_range.clone(),
+        }
+    }
+}
+
 impl<L: Language + 'static> From<SourceFunction<L>> for AnySourceFunction {
     fn from(
         SourceFunction {
@@ -59,6 +73,7 @@ impl<L: Language + 'static> From<SourceFunction<L>> for AnySourceFunction {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnySourceFunction {
     name: String,
     definition: String,

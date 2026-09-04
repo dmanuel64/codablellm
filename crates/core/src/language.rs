@@ -1,6 +1,10 @@
 use std::{any::Any, ffi::OsStr, path::Path};
 
-pub trait Language: Any + Send + Sync {
+use dyn_clone::DynClone;
+use serde::{Deserialize, Serialize};
+
+#[typetag::serde(tag = "language")]
+pub trait Language: std::fmt::Debug + Any + Send + Sync + DynClone {
     fn name(&self) -> &str;
     fn file_extensions(&self) -> Vec<&str>;
 
@@ -15,10 +19,12 @@ pub trait Language: Any + Send + Sync {
         }
     }
 }
+dyn_clone::clone_trait_object!(Language);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct C;
 
+#[typetag::serde]
 impl Language for C {
     fn name(&self) -> &str {
         "C"
@@ -29,11 +35,12 @@ impl Language for C {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Cpp {
     pub include_h_files: bool,
 }
 
+#[typetag::serde]
 impl Language for Cpp {
     fn name(&self) -> &str {
         "C++"
@@ -56,9 +63,10 @@ impl Default for Cpp {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Python;
 
+#[typetag::serde]
 impl Language for Python {
     fn name(&self) -> &str {
         "Python"
@@ -69,13 +77,14 @@ impl Language for Python {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct JavaScript {
     pub include_jsx_files: bool,
     pub include_mjs_files: bool,
     pub include_cjs_files: bool,
 }
 
+#[typetag::serde]
 impl Language for JavaScript {
     fn name(&self) -> &str {
         "JavaScript"
@@ -106,11 +115,12 @@ impl Default for JavaScript {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct TypeScript {
     pub include_tsx: bool,
 }
 
+#[typetag::serde]
 impl Language for TypeScript {
     fn name(&self) -> &str {
         "TypeScript"
@@ -125,9 +135,10 @@ impl Language for TypeScript {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Go;
 
+#[typetag::serde]
 impl Language for Go {
     fn name(&self) -> &str {
         "Go"
@@ -138,9 +149,10 @@ impl Language for Go {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Rust;
 
+#[typetag::serde]
 impl Language for Rust {
     fn name(&self) -> &str {
         "Rust"
@@ -151,9 +163,10 @@ impl Language for Rust {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Java;
 
+#[typetag::serde]
 impl Language for Java {
     fn name(&self) -> &str {
         "Java"
@@ -164,9 +177,10 @@ impl Language for Java {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct CSharp;
 
+#[typetag::serde]
 impl Language for CSharp {
     fn name(&self) -> &str {
         "C#"
