@@ -16,7 +16,7 @@ keywords = [
 ]
 homepage = "https://codablellm.readthedocs.io/"
 license = "MIT"
-version = "2.0.0"
+version = "2.0.0-alpha.1"
 edition = "2024"
 rust-version = "1.96"
 

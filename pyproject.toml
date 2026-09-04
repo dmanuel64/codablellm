@@ -1,6 +1,6 @@
 [project]
 name = "codablellm"
-version = "2.0.0"
+version = "2.0.0a1"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
