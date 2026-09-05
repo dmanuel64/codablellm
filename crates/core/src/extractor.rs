@@ -8,8 +8,7 @@ use thiserror::Error;
 
 use crate::{
     ProgressDisplay,
-    function::{AnySourceFunction, Function, ParsedSourceFunctions, SourceFunction},
-    language::{self, Language},
+    function::{Function, ParsedFunctions},
     parser::{self, ParsedCode},
     repo::Repository,
 };
@@ -83,21 +82,15 @@ pub struct Options {
     pub headers_as_cpp: bool,
 }
 
-pub fn extract(repo: &Repository) -> Result<Vec<AnySourceFunction>, Error> {
+pub fn extract(repo: &Repository) -> Result<Vec<Function>, Error> {
     extract_with_options(repo, &Options::default())
 }
 
-pub fn extract_with_options(
-    repo: &Repository,
-    options: &Options,
-) -> Result<Vec<AnySourceFunction>, Error> {
+pub fn extract_with_options(repo: &Repository, options: &Options) -> Result<Vec<Function>, Error> {
     extract_inner(repo, None, options)
 }
 
-pub fn transform(
-    repo: &Repository,
-    transform: &Transform,
-) -> Result<Vec<AnySourceFunction>, Error> {
+pub fn transform(repo: &Repository, transform: &Transform) -> Result<Vec<Function>, Error> {
     transform_with_options(repo, transform, &Options::default())
 }
 
@@ -105,7 +98,7 @@ pub fn transform_with_options(
     repo: &Repository,
     transform: &Transform,
     options: &Options,
-) -> Result<Vec<AnySourceFunction>, Error> {
+) -> Result<Vec<Function>, Error> {
     extract_inner(repo, Some(transform), options)
 }
 
@@ -116,7 +109,7 @@ fn extract_inner(
         progress_display,
         headers_as_cpp,
     }: &Options,
-) -> Result<Vec<AnySourceFunction>, Error> {
+) -> Result<Vec<Function>, Error> {
     let progress = progress_display.new_progress_bar(None);
     let source_files = repo.source_files();
     if let (_, Some(num_files)) = source_files.size_hint() {
@@ -131,7 +124,7 @@ fn extract_inner(
         .progress_with(progress)
         .map(|path| {
             tracing::debug!(file = %path.display(), "Extracting source code file");
-            match extract_file(language::C, &path, transform) {
+            match extract_file(&path, transform, *headers_as_cpp) {
                 Ok(f) => f,
                 Err(Error::Parser(parser::Error::UnknownLanguage { file })) => {
                     tracing::warn!(
@@ -147,18 +140,16 @@ fn extract_inner(
             }
         })
         .flatten()
-        .map(|f| -> AnySourceFunction { f.into() })
         .collect();
     Ok(functions)
 }
 
-fn extract_file<L: Language>(
-    language: L,
+fn extract_file(
     path: &Path,
     transform: Option<&Transform>,
-) -> Result<Vec<SourceFunction<L>>, Error> {
-    let mut parsed_functions =
-        ParsedSourceFunctions::new(parser::parse_file(path, headers_as_cpp)?);
+    headers_as_cpp: bool,
+) -> Result<Vec<Function>, Error> {
+    let mut parsed_functions = ParsedFunctions::new(parser::parse_file(path, headers_as_cpp)?);
     if let Some(t) = transform {
         parsed_functions.edit(|f| match t.apply(f) {
             Ok(new_function) if new_function.is_changed() => {

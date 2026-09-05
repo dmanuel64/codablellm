@@ -2,7 +2,7 @@ use std::{num::NonZeroUsize, path::PathBuf, sync::OnceLock};
 
 use clap::{Args, ValueEnum};
 use codablellm_core::{
-    BinaryMode, Dataset, Metadata, Mode, Options, Transform, dataset, decompiler, extractor, mapper,
+    BinaryMode, Dataset, Language, Mode, Options, Transform, dataset, decompiler, extractor, mapper,
 };
 use color_eyre::eyre::Result;
 use inquire::required;
@@ -96,7 +96,7 @@ pub struct CreateDatasetArgs {
     exclude: Vec<PathBuf>,
 
     #[arg(help_heading = EXTRACTOR_OPTS_HEADING, long, aliases = ["language", "lang"], visible_alias = "langs", default_values_t = config::get().languages.include)]
-    languages: Vec<Metadata>,
+    languages: Vec<Language>,
 
     #[arg(short, long)]
     jobs: Option<NonZeroUsize>,
@@ -288,7 +288,7 @@ pub struct ResolvedCreateDatasetArgs {
     output: Option<PathBuf>,
     include: Vec<PathBuf>,
     exclude: Vec<PathBuf>,
-    languages: Vec<Metadata>,
+    languages: Vec<Language>,
     jobs: Option<NonZeroUsize>,
     extractor_jobs: Option<NonZeroUsize>,
     decompiler_jobs: Option<NonZeroUsize>,

@@ -1,5 +1,4 @@
 use std::{
-    any::Any,
     ffi::OsStr,
     fmt::Display,
     ops::Range,
@@ -7,329 +6,90 @@ use std::{
     str::Utf8Error,
 };
 
-use indoc::indoc;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use tree_sitter::StreamingIterator;
 
 use crate::{
-    language::{self, Language},
-    parser::ParsedCode,
+    Language,
+    parser::{Error, ParsedCode},
 };
 
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("Incorrect function language")]
-    InvalidLanguage,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourceFunction<L: Language> {
-    name: String,
-    definition: String,
-    source: Option<PathBuf>,
-    language: L,
-    #[serde(skip)]
-    bytes_range: Range<usize>,
-    line_range: Range<usize>,
-    column_range: Range<usize>,
-}
-
-impl<L: Language + Clone> SourceFunction<L> {
-    pub fn as_any(&self) -> AnySourceFunction {
-        AnySourceFunction {
-            name: self.name.clone(),
-            definition: self.definition.clone(),
-            source: self.source.clone(),
-            language: Box::new(self.language.clone()),
-            bytes_range: self.bytes_range.clone(),
-            line_range: self.line_range.clone(),
-            column_range: self.column_range.clone(),
+const fn get_function_sexp(language: &Language) -> &'static str {
+    match language {
+        Language::C => {
+            r#"
+        (function_definition
+            declarator: (function_declarator
+                declarator: (identifier) @name)
+        ) @definition
+    "#
         }
-    }
-}
-
-impl<L: Language + 'static> From<SourceFunction<L>> for AnySourceFunction {
-    fn from(
-        SourceFunction {
-            name,
-            definition,
-            source,
-            language,
-            bytes_range,
-            line_range,
-            column_range,
-        }: SourceFunction<L>,
-    ) -> Self {
-        Self {
-            name,
-            definition,
-            source,
-            language: Box::new(language),
-            bytes_range,
-            line_range,
-            column_range,
+        Language::Cpp => {
+            r#"
+        (function_definition
+            declarator: (function_declarator
+                declarator: [(identifier) (field_identifier)] @name)
+        ) @definition
+    "#
         }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AnySourceFunction {
-    name: String,
-    definition: String,
-    source: Option<PathBuf>,
-    language: Box<dyn Language>,
-    bytes_range: Range<usize>,
-    line_range: Range<usize>,
-    column_range: Range<usize>,
-}
-
-impl AnySourceFunction {
-    fn into_language<L: Language + Clone>(self) -> Result<SourceFunction<L>, Error> {
-        let any_obj: Box<dyn Any> = self.language;
-        if let Ok(lang) = any_obj.downcast::<L>() {
-            Ok(SourceFunction {
-                name: self.name,
-                definition: self.definition,
-                source: self.source,
-                language: *lang,
-                bytes_range: self.bytes_range,
-                line_range: self.line_range,
-                column_range: self.column_range,
-            })
-        } else {
-            Err(Error::InvalidLanguage)
+        Language::Python => {
+            r#"
+        (function_definition
+            name: (identifier) @name
+        ) @definition
+    "#
         }
-    }
-
-    fn as_language<L: Language + Clone>(&self) -> Option<SourceFunction<L>> {
-        let any_obj: &dyn Any = &self.language;
-        if let Some(lang) = any_obj.downcast_ref::<L>() {
-            Some(SourceFunction {
-                name: self.name.clone(),
-                definition: self.definition.clone(),
-                source: self.source.clone(),
-                language: lang.clone(),
-                bytes_range: self.bytes_range.clone(),
-                line_range: self.line_range.clone(),
-                column_range: self.column_range.clone(),
-            })
-        } else {
-            None
-        }
-    }
-
-    pub fn as_c(&self) -> Option<SourceFunction<language::C>> {
-        self.as_language()
-    }
-
-    pub fn as_cpp(&self) -> Option<SourceFunction<language::Cpp>> {
-        self.as_language()
-    }
-
-    pub fn as_python(&self) -> Option<SourceFunction<language::Python>> {
-        self.as_language()
-    }
-
-    pub fn as_javascript(&self) -> Option<SourceFunction<language::JavaScript>> {
-        self.as_language()
-    }
-
-    pub fn as_typescript(&self) -> Option<SourceFunction<language::TypeScript>> {
-        self.as_language()
-    }
-
-    pub fn as_java(&self) -> Option<SourceFunction<language::Java>> {
-        self.as_language()
-    }
-
-    pub fn as_go(&self) -> Option<SourceFunction<language::Go>> {
-        self.as_language()
-    }
-
-    pub fn as_rust(&self) -> Option<SourceFunction<language::Rust>> {
-        self.as_language()
-    }
-
-    pub fn as_csharp(&self) -> Option<SourceFunction<language::CSharp>> {
-        self.as_language()
-    }
-}
-
-impl TryFrom<AnySourceFunction> for SourceFunction<language::C> {
-    type Error = Error;
-
-    fn try_from(value: AnySourceFunction) -> Result<Self, Self::Error> {
-        value.into_language()
-    }
-}
-
-impl TryFrom<AnySourceFunction> for SourceFunction<language::Cpp> {
-    type Error = Error;
-
-    fn try_from(value: AnySourceFunction) -> Result<Self, Self::Error> {
-        value.into_language()
-    }
-}
-
-impl TryFrom<AnySourceFunction> for SourceFunction<language::Python> {
-    type Error = Error;
-
-    fn try_from(value: AnySourceFunction) -> Result<Self, Self::Error> {
-        value.into_language()
-    }
-}
-
-impl TryFrom<AnySourceFunction> for SourceFunction<language::JavaScript> {
-    type Error = Error;
-
-    fn try_from(value: AnySourceFunction) -> Result<Self, Self::Error> {
-        value.into_language()
-    }
-}
-
-impl TryFrom<AnySourceFunction> for SourceFunction<language::TypeScript> {
-    type Error = Error;
-
-    fn try_from(value: AnySourceFunction) -> Result<Self, Self::Error> {
-        value.into_language()
-    }
-}
-
-impl TryFrom<AnySourceFunction> for SourceFunction<language::Go> {
-    type Error = Error;
-
-    fn try_from(value: AnySourceFunction) -> Result<Self, Self::Error> {
-        value.into_language()
-    }
-}
-
-impl TryFrom<AnySourceFunction> for SourceFunction<language::Rust> {
-    type Error = Error;
-
-    fn try_from(value: AnySourceFunction) -> Result<Self, Self::Error> {
-        value.into_language()
-    }
-}
-
-impl TryFrom<AnySourceFunction> for SourceFunction<language::Java> {
-    type Error = Error;
-
-    fn try_from(value: AnySourceFunction) -> Result<Self, Self::Error> {
-        value.into_language()
-    }
-}
-
-impl TryFrom<AnySourceFunction> for SourceFunction<language::CSharp> {
-    type Error = Error;
-
-    fn try_from(value: AnySourceFunction) -> Result<Self, Self::Error> {
-        value.into_language()
-    }
-}
-
-trait FunctionSexpExt {
-    fn function_sexp(&self) -> &str;
-}
-
-impl FunctionSexpExt for language::C {
-    fn function_sexp(&self) -> &str {
-        indoc! {r#"
-            (function_definition
-                 declarator: (function_declarator
-                     declarator: (identifier) @name)
-             ) @definition
-        "#}
-    }
-}
-
-impl FunctionSexpExt for language::Cpp {
-    fn function_sexp(&self) -> &str {
-        indoc! {r#"
-            (function_definition
-                declarator: (function_declarator
-                    declarator: [(identifier) (field_identifier)] @name)
-            ) @definition
-        "#}
-    }
-}
-
-impl FunctionSexpExt for language::Python {
-    fn function_sexp(&self) -> &str {
-        indoc! {r#"
-            (function_definition
-                name: (identifier) @name
-            ) @definition
-        "#}
-    }
-}
-
-impl FunctionSexpExt for language::JavaScript {
-    fn function_sexp(&self) -> &str {
-        indoc! {r#"
-            [
-                (function_declaration
-                    name: (identifier) @name) @definition
-                (method_definition
-                    name: (property_identifier) @name) @definition
-            ]
-        "#}
-    }
-}
-
-impl FunctionSexpExt for language::TypeScript {
-    fn function_sexp(&self) -> &str {
-        indoc! {r#"
-            [
-                (function_declaration
-                    name: (identifier) @name) @definition
-                (method_definition
-                    name: (property_identifier) @name) @definition
-            ]
-        "#}
-    }
-}
-
-impl FunctionSexpExt for language::Go {
-    fn function_sexp(&self) -> &str {
-        indoc! {r#"
+        Language::JavaScript => {
+            r#"
+        [
             (function_declaration
-                name: (identifier) @name
-            ) @definition
-            (method_declaration
-                name: (field_identifier) @name
-            ) @definition
-        "#}
-    }
-}
-
-impl FunctionSexpExt for language::Rust {
-    fn function_sexp(&self) -> &str {
-        indoc! {r#"
-            (function_item
-                name: (identifier) @name
-            ) @definition
-        "#}
-    }
-}
-
-impl FunctionSexpExt for language::Java {
-    fn function_sexp(&self) -> &str {
-        indoc! {r#"
-            (method_declaration
-                name: (identifier) @name
-            ) @definition
-        "#}
-    }
-}
-
-impl FunctionSexpExt for language::CSharp {
-    fn function_sexp(&self) -> &str {
-        indoc! {r#"
-            (method_declaration
-                name: (identifier) @name
-            ) @definition
-        "#}
+                name: (identifier) @name) @definition
+            (method_definition
+                name: (property_identifier) @name) @definition
+        ]
+    "#
+        }
+        Language::TypeScript => {
+            r#"
+        [
+            (function_declaration
+                name: (identifier) @name) @definition
+            (method_definition
+                name: (property_identifier) @name) @definition
+        ]
+    "#
+        }
+        Language::Go => {
+            r#"
+        (function_declaration
+            name: (identifier) @name
+        ) @definition
+        (method_declaration
+            name: (field_identifier) @name
+        ) @definition
+    "#
+        }
+        Language::Rust => {
+            r#"
+        (function_item
+            name: (identifier) @name
+        ) @definition
+    "#
+        }
+        Language::Java => {
+            r#"
+        (method_declaration
+            name: (identifier) @name
+        ) @definition
+    "#
+        }
+        Language::CSharp => {
+            r#"
+        (method_declaration
+            name: (identifier) @name
+        ) @definition
+    "#
+        }
     }
 }
 
@@ -355,7 +115,7 @@ pub enum Function {
     // TODO: make these variants types so they have non-public access qualifiers
     Source {
         metadata: Metadata,
-        language: Metadata,
+        language: Language,
         location: Location,
     },
     Decompiled {
@@ -372,7 +132,7 @@ impl Function {
         name: String,
         definition: String,
         source: Option<PathBuf>,
-        language: Metadata,
+        language: Language,
         bytes_range: Range<usize>,
         line_range: Range<usize>,
         column_range: Range<usize>,
@@ -551,20 +311,20 @@ impl rhai::CustomType for Function {
     }
 }
 
-pub(crate) struct ParsedSourceFunctions<L: Language> {
-    code: ParsedCode<L>,
+pub(crate) struct ParsedFunctions {
+    code: ParsedCode,
     functions: Vec<Function>,
 }
 
-impl<L: Language> ParsedSourceFunctions<L> {
-    pub fn new(code: ParsedCode<L>) -> Self {
+impl ParsedFunctions {
+    pub fn new(code: ParsedCode) -> Self {
         Self {
             code,
             functions: Vec::new(),
         }
     }
 
-    pub fn code(&self) -> &ParsedCode<L> {
+    pub fn code(&self) -> &ParsedCode {
         &self.code
     }
 
