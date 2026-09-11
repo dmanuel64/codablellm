@@ -1,315 +1,510 @@
 use std::{
-    ffi::OsStr,
+    borrow::Cow,
     fmt::Display,
     ops::Range,
     path::{Path, PathBuf},
     str::Utf8Error,
 };
 
+use indoc::indoc;
 use serde::{Deserialize, Serialize};
 use tree_sitter::StreamingIterator;
 
 use crate::{
-    Language,
+    SourceLanguage,
+    language::Language,
     parser::{Error, ParsedCode},
 };
 
-const fn get_function_sexp(language: &Language) -> &'static str {
+const fn get_function_sexp(language: &SourceLanguage) -> &'static str {
     match language {
-        Language::C => {
-            r#"
-        (function_definition
-            declarator: (function_declarator
-                declarator: (identifier) @name)
-        ) @definition
-    "#
-        }
-        Language::Cpp => {
-            r#"
-        (function_definition
-            declarator: (function_declarator
-                declarator: [(identifier) (field_identifier)] @name)
-        ) @definition
-    "#
-        }
-        Language::Python => {
-            r#"
-        (function_definition
-            name: (identifier) @name
-        ) @definition
-    "#
-        }
-        Language::JavaScript => {
-            r#"
-        [
+        SourceLanguage::C => indoc! {r#"
+            (function_definition
+                declarator: (function_declarator
+                    declarator: (identifier) @name)
+            ) @definition
+        "#},
+        SourceLanguage::Cpp => indoc! {r#"
+            (function_definition
+                declarator: (function_declarator
+                    declarator: [(identifier) (field_identifier)] @name)
+            ) @definition
+        "#},
+        SourceLanguage::Python => indoc! {r#"
+            (function_definition
+                name: (identifier) @name
+            ) @definition
+        "#},
+        SourceLanguage::JavaScript => indoc! {r#"
+            [
+                (function_declaration
+                    name: (identifier) @name) @definition
+                (method_definition
+                    name: (property_identifier) @name) @definition
+            ]
+        "#},
+        SourceLanguage::TypeScript => indoc! {r#"
+            [
+                (function_declaration
+                    name: (identifier) @name) @definition
+                (method_definition
+                    name: (property_identifier) @name) @definition
+            ]
+        "#},
+        SourceLanguage::Go => indoc! {r#"
             (function_declaration
-                name: (identifier) @name) @definition
-            (method_definition
-                name: (property_identifier) @name) @definition
-        ]
-    "#
-        }
-        Language::TypeScript => {
-            r#"
-        [
-            (function_declaration
-                name: (identifier) @name) @definition
-            (method_definition
-                name: (property_identifier) @name) @definition
-        ]
-    "#
-        }
-        Language::Go => {
-            r#"
-        (function_declaration
-            name: (identifier) @name
-        ) @definition
-        (method_declaration
-            name: (field_identifier) @name
-        ) @definition
-    "#
-        }
-        Language::Rust => {
-            r#"
-        (function_item
-            name: (identifier) @name
-        ) @definition
-    "#
-        }
-        Language::Java => {
-            r#"
-        (method_declaration
-            name: (identifier) @name
-        ) @definition
-    "#
-        }
-        Language::CSharp => {
-            r#"
-        (method_declaration
-            name: (identifier) @name
-        ) @definition
-    "#
-        }
+                name: (identifier) @name
+            ) @definition
+            (method_declaration
+                name: (field_identifier) @name
+            ) @definition
+        "#},
+        SourceLanguage::Rust => indoc! {r#"
+            (function_item
+                name: (identifier) @name
+            ) @definition
+        "#},
+        SourceLanguage::Java => indoc! {r#"
+            (method_declaration
+                name: (identifier) @name
+            ) @definition
+        "#},
+        SourceLanguage::CSharp => indoc! {r#"
+            (method_declaration
+                name: (identifier) @name
+            ) @definition
+        "#},
     }
-}
-
-// TODO: metadata isn't the most accurate name to include name & definition
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Metadata {
-    name: String,
-    definition: String,
-    extra: Option<serde_json::Value>,
-    source: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Location {
+    pub source: PathBuf,
     #[serde(skip)]
-    bytes_range: Range<usize>,
-    line_range: Range<usize>,
-    column_range: Range<usize>,
+    pub bytes_range: Range<usize>,
+    pub line_range: Range<usize>,
+    pub column_range: Range<usize>,
+}
+
+impl Display for Location {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let source = self.source.to_string_lossy();
+        write!(f, "{source}:{}", self.line_range.start)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Function {
-    // TODO: make these variants types so they have non-public access qualifiers
-    Source {
-        metadata: Metadata,
-        language: Language,
-        location: Location,
-    },
-    Decompiled {
-        metadata: Metadata,
-    },
-    Assembly {
-        metadata: Metadata,
-        location: Location,
-    },
+pub struct Descriptor {
+    pub name: String,
+    pub definition: String,
+    pub language: Language,
+    pub location: Option<Location>,
 }
 
-impl Function {
-    pub fn new_source(
-        name: String,
-        definition: String,
-        source: Option<PathBuf>,
-        language: Language,
-        bytes_range: Range<usize>,
-        line_range: Range<usize>,
-        column_range: Range<usize>,
-    ) -> Self {
-        Self::Source {
-            metadata: Metadata {
-                name,
-                definition,
-                extra: None,
-                source,
-            },
-            language,
-            location: Location {
-                bytes_range,
-                line_range,
-                column_range,
-            },
-        }
+pub trait Function {
+    fn descriptor(&self) -> &Descriptor;
+
+    fn name(&self) -> &str {
+        &self.descriptor().name
     }
 
-    pub fn new_assembly(
-        name: String,
-        definition: String,
-        source: Option<PathBuf>,
-        bytes_range: Range<usize>,
-        line_range: Range<usize>,
-        column_range: Range<usize>,
-    ) -> Self {
-        Self::Assembly {
-            metadata: Metadata {
-                name,
-                definition,
-                extra: None,
-                source,
-            },
-            location: Location {
-                bytes_range,
-                line_range,
-                column_range,
-            },
-        }
+    fn definition(&self) -> &str {
+        &self.descriptor().definition
     }
 
-    pub fn new_decompiled(name: String, definition: String, source: Option<PathBuf>) -> Self {
-        Self::Decompiled {
-            metadata: Metadata {
-                name,
-                definition,
-                extra: None,
-                source,
-            },
-        }
+    fn language(&self) -> Language {
+        self.descriptor().language
     }
 
-    pub fn metadata(&self) -> &Metadata {
+    fn location(&self) -> &Option<Location> {
+        &self.descriptor().location
+    }
+}
+
+impl Display for dyn Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let location = self
+            .location()
+            .as_ref()
+            .map(Location::to_string)
+            .unwrap_or_else(|| String::from("<MEM>"));
+        let func = self.name();
+        write!(f, "{func} ({location})")
+    }
+}
+
+pub trait ScopedFunction: Function {
+    fn scope(&self) -> &[String];
+}
+
+impl Display for dyn ScopedFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let out = (self as &dyn Function).to_string();
+        let separator = match self.language() {
+            Language::Source(SourceLanguage::Cpp | SourceLanguage::Rust) => "::",
+            _ => ".",
+        };
+        let scope = self.scope().join(separator);
+        write!(f, "{scope}{separator}{out}")
+    }
+}
+
+pub trait Method: ScopedFunction {
+    fn receiver(&self) -> &str;
+}
+
+impl Display for dyn Method {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let out = ToString::to_string(self as &dyn Function);
+        let separator = match self.language() {
+            Language::Source(SourceLanguage::Cpp | SourceLanguage::Rust) => "::",
+            _ => ".",
+        };
+        let scope = self.scope().join(separator);
+        let receiver = self.receiver();
+        write!(f, "{scope}{separator}{receiver}{separator}{out}")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SourceFunction {
+    CFunction(CFunction),
+    CppFunction(CppFunction),
+    CppMethod(CppMethod),
+    CppAssociatedFunction(CppAssociatedFunction),
+    PythonFunction(PythonFunction),
+    PythonMethod(PythonMethod),
+    PythonAssociatedFunction(PythonAssociatedFunction),
+    JavaScriptFunction(JavaScriptFunction),
+    JavaScriptMethod(JavaScriptMethod),
+    JavaScriptAssociatedFunction(JavaScriptAssociatedFunction),
+    TypeScriptFunction(TypeScriptFunction),
+    TypeScriptMethod(TypeScriptMethod),
+    TypeScriptAssociatedFunction(TypeScriptAssociatedFunction),
+    GoFunction(GoFunction),
+    GoMethod(GoMethod),
+    RustFunction(RustFunction),
+    RustMethod(RustMethod),
+    RustAssociatedFunction(RustAssociatedFunction),
+    JavaMethod(JavaMethod),
+    JavaAssociatedFunction(JavaAssociatedFunction),
+    CSharpMethod(CSharpMethod),
+    CSharpAssociatedFunction(CSharpAssociatedFunction),
+}
+
+impl Function for SourceFunction {
+    fn descriptor(&self) -> &Descriptor {
         match self {
-            Function::Source { metadata, .. } => metadata,
-            Function::Decompiled { metadata, .. } => metadata,
-            Function::Assembly { metadata, .. } => metadata,
-        }
-    }
-
-    fn metadata_mut(&mut self) -> &mut Metadata {
-        match self {
-            Function::Source { metadata, .. } => metadata,
-            Function::Decompiled { metadata, .. } => metadata,
-            Function::Assembly { metadata, .. } => metadata,
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.metadata().name
-    }
-
-    pub fn definition(&self) -> &str {
-        &self.metadata().definition
-    }
-
-    pub fn source(&self) -> Option<&Path> {
-        self.metadata().source.as_ref().map(PathBuf::as_path)
-    }
-
-    pub fn language(&self) -> String {
-        match self {
-            Function::Source { language, .. } => language.to_string(),
-            Function::Decompiled { .. } => String::from("Pseudo-C"),
-            Function::Assembly { .. } => String::from("Assembly"),
-        }
-    }
-
-    pub fn extra(&self) -> &Option<serde_json::Value> {
-        &self.metadata().extra
-    }
-
-    pub fn extra_mut(&mut self) -> &mut Option<serde_json::Value> {
-        &mut self.metadata_mut().extra
-    }
-
-    pub fn edit(&mut self, new_name: Option<String>, new_definition: String) {
-        match self {
-            Function::Source {
-                metadata, location, ..
-            }
-            | Function::Assembly { metadata, location } => {
-                let Metadata {
-                    name, definition, ..
-                } = metadata;
-                let Location {
-                    bytes_range,
-                    line_range,
-                    column_range,
-                } = location;
-                line_range.end = line_range.start + new_definition.lines().count();
-                column_range.end = new_definition
-                    .lines()
-                    .map(str::len)
-                    .max()
-                    .unwrap_or_default();
-                bytes_range.end = bytes_range.start + new_definition.bytes().len();
-                if let Some(n) = new_name {
-                    *name = n;
-                }
-                *definition = new_definition;
-            }
-            Function::Decompiled { metadata } => todo!("support for decompiled code edits"),
+            SourceFunction::CFunction(func) => func.descriptor(),
+            SourceFunction::CppFunction(func) => func.descriptor(),
+            SourceFunction::CppMethod(func) => func.descriptor(),
+            SourceFunction::CppAssociatedFunction(func) => func.descriptor(),
+            SourceFunction::PythonFunction(func) => func.descriptor(),
+            SourceFunction::PythonMethod(func) => func.descriptor(),
+            SourceFunction::PythonAssociatedFunction(func) => func.descriptor(),
+            SourceFunction::JavaScriptFunction(func) => func.descriptor(),
+            SourceFunction::JavaScriptMethod(func) => func.descriptor(),
+            SourceFunction::JavaScriptAssociatedFunction(func) => func.descriptor(),
+            SourceFunction::TypeScriptFunction(func) => func.descriptor(),
+            SourceFunction::TypeScriptMethod(func) => func.descriptor(),
+            SourceFunction::TypeScriptAssociatedFunction(func) => func.descriptor(),
+            SourceFunction::GoFunction(func) => func.descriptor(),
+            SourceFunction::GoMethod(func) => func.descriptor(),
+            SourceFunction::RustFunction(func) => func.descriptor(),
+            SourceFunction::RustMethod(func) => func.descriptor(),
+            SourceFunction::RustAssociatedFunction(func) => func.descriptor(),
+            SourceFunction::JavaMethod(func) => func.descriptor(),
+            SourceFunction::JavaAssociatedFunction(func) => func.descriptor(),
+            SourceFunction::CSharpMethod(func) => func.descriptor(),
+            SourceFunction::CSharpAssociatedFunction(func) => func.descriptor(),
         }
     }
 }
 
-impl Display for Function {
+impl SourceFunction {
+    pub fn as_c_function(&self) -> Option<&CFunction> {
+        if let SourceFunction::CFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_cpp_function(&self) -> Option<&CppFunction> {
+        if let SourceFunction::CppFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_cpp_method(&self) -> Option<&CppMethod> {
+        if let SourceFunction::CppMethod(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_cpp_associated_function(&self) -> Option<&CppAssociatedFunction> {
+        if let SourceFunction::CppAssociatedFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_python_function(&self) -> Option<&PythonFunction> {
+        if let SourceFunction::PythonFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_python_method(&self) -> Option<&PythonMethod> {
+        if let SourceFunction::PythonMethod(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_python_associated_function(&self) -> Option<&PythonAssociatedFunction> {
+        if let SourceFunction::PythonAssociatedFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_java_script_function(&self) -> Option<&JavaScriptFunction> {
+        if let SourceFunction::JavaScriptFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_java_script_method(&self) -> Option<&JavaScriptMethod> {
+        if let SourceFunction::JavaScriptMethod(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_java_script_associated_function(&self) -> Option<&JavaScriptAssociatedFunction> {
+        if let SourceFunction::JavaScriptAssociatedFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_type_script_function(&self) -> Option<&TypeScriptFunction> {
+        if let SourceFunction::TypeScriptFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_type_script_method(&self) -> Option<&TypeScriptMethod> {
+        if let SourceFunction::TypeScriptMethod(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_type_script_associated_function(&self) -> Option<&TypeScriptAssociatedFunction> {
+        if let SourceFunction::TypeScriptAssociatedFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_go_function(&self) -> Option<&GoFunction> {
+        if let SourceFunction::GoFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_go_method(&self) -> Option<&GoMethod> {
+        if let SourceFunction::GoMethod(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_rust_function(&self) -> Option<&RustFunction> {
+        if let SourceFunction::RustFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_rust_method(&self) -> Option<&RustMethod> {
+        if let SourceFunction::RustMethod(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_rust_associated_function(&self) -> Option<&RustAssociatedFunction> {
+        if let SourceFunction::RustAssociatedFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_java_method(&self) -> Option<&JavaMethod> {
+        if let SourceFunction::JavaMethod(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_java_associated_function(&self) -> Option<&JavaAssociatedFunction> {
+        if let SourceFunction::JavaAssociatedFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_csharp_method(&self) -> Option<&CSharpMethod> {
+        if let SourceFunction::CSharpMethod(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_csharp_associated_function(&self) -> Option<&CSharpAssociatedFunction> {
+        if let SourceFunction::CSharpAssociatedFunction(func) = self {
+            Some(func)
+        } else {
+            None
+        }
+    }
+
+    pub fn scope(&self) -> Option<&[String]> {
+        match self {
+            SourceFunction::CFunction(_)
+            | SourceFunction::CppFunction(_)
+            | SourceFunction::PythonFunction(_)
+            | SourceFunction::JavaScriptFunction(_)
+            | SourceFunction::TypeScriptFunction(_)
+            | SourceFunction::GoFunction(_)
+            | SourceFunction::RustFunction(_) => None,
+            SourceFunction::CppMethod(func) => Some(func.scope()),
+            SourceFunction::CppAssociatedFunction(func) => Some(func.scope()),
+            SourceFunction::PythonMethod(func) => Some(func.scope()),
+            SourceFunction::PythonAssociatedFunction(func) => Some(func.scope()),
+            SourceFunction::JavaScriptMethod(func) => Some(func.scope()),
+            SourceFunction::JavaScriptAssociatedFunction(func) => Some(func.scope()),
+            SourceFunction::TypeScriptMethod(func) => Some(func.scope()),
+            SourceFunction::TypeScriptAssociatedFunction(func) => Some(func.scope()),
+            SourceFunction::GoMethod(func) => Some(func.scope()),
+            SourceFunction::RustMethod(func) => Some(func.scope()),
+            SourceFunction::RustAssociatedFunction(func) => Some(func.scope()),
+            SourceFunction::JavaMethod(func) => Some(func.scope()),
+            SourceFunction::JavaAssociatedFunction(func) => Some(func.scope()),
+            SourceFunction::CSharpMethod(func) => Some(func.scope()),
+            SourceFunction::CSharpAssociatedFunction(func) => Some(func.scope()),
+        }
+    }
+
+    pub fn receiver(&self) -> Option<&str> {
+        match self {
+            SourceFunction::CFunction(_)
+            | SourceFunction::CppFunction(_)
+            | SourceFunction::PythonFunction(_)
+            | SourceFunction::JavaScriptFunction(_)
+            | SourceFunction::TypeScriptFunction(_)
+            | SourceFunction::GoFunction(_)
+            | SourceFunction::RustFunction(_)
+            | SourceFunction::CppAssociatedFunction(_)
+            | SourceFunction::PythonAssociatedFunction(_)
+            | SourceFunction::JavaScriptAssociatedFunction(_)
+            | SourceFunction::TypeScriptAssociatedFunction(_)
+            | SourceFunction::RustAssociatedFunction(_)
+            | SourceFunction::JavaAssociatedFunction(_)
+            | SourceFunction::CSharpAssociatedFunction(_) => None,
+            SourceFunction::CppMethod(func) => Some(func.receiver()),
+            SourceFunction::PythonMethod(func) => Some(func.receiver()),
+            SourceFunction::JavaScriptMethod(func) => Some(func.receiver()),
+            SourceFunction::TypeScriptMethod(func) => Some(func.receiver()),
+            SourceFunction::GoMethod(func) => Some(func.receiver()),
+            SourceFunction::RustMethod(func) => Some(func.receiver()),
+            SourceFunction::JavaMethod(func) => Some(func.receiver()),
+            SourceFunction::CSharpMethod(func) => Some(func.receiver()),
+        }
+    }
+}
+
+impl Display for SourceFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Function::Source { location, .. } | Function::Assembly { location, .. } => write!(
-                f,
-                "{}::{}:{}",
-                self.source()
-                    .and_then(Path::file_name)
-                    .map(OsStr::to_string_lossy)
-                    .unwrap_or_else(|| String::from("<MEM>").into()),
-                self.name(),
-                location.line_range.start
-            ),
-            Function::Decompiled { .. } => write!(
-                f,
-                "{}::{}",
-                self.source()
-                    .and_then(Path::file_name)
-                    .map(OsStr::to_string_lossy)
-                    .unwrap_or_else(|| String::from("<MEM>").into()),
-                self.name(),
-            ),
+            SourceFunction::CFunction(func) => write!(f, "{func}"),
+            SourceFunction::CppFunction(func) => write!(f, "{func}"),
+            SourceFunction::CppMethod(func) => write!(f, "{func}"),
+            SourceFunction::CppAssociatedFunction(func) => write!(f, "{func}"),
+            SourceFunction::PythonFunction(func) => write!(f, "{func}"),
+            SourceFunction::PythonMethod(func) => write!(f, "{func}"),
+            SourceFunction::PythonAssociatedFunction(func) => write!(f, "{func}"),
+            SourceFunction::JavaScriptFunction(func) => write!(f, "{func}"),
+            SourceFunction::JavaScriptMethod(func) => write!(f, "{func}"),
+            SourceFunction::JavaScriptAssociatedFunction(func) => write!(f, "{func}"),
+            SourceFunction::TypeScriptFunction(func) => write!(f, "{func}"),
+            SourceFunction::TypeScriptMethod(func) => write!(f, "{func}"),
+            SourceFunction::TypeScriptAssociatedFunction(func) => write!(f, "{func}"),
+            SourceFunction::GoFunction(func) => write!(f, "{func}"),
+            SourceFunction::GoMethod(func) => write!(f, "{func}"),
+            SourceFunction::RustFunction(func) => write!(f, "{func}"),
+            SourceFunction::RustMethod(func) => write!(f, "{func}"),
+            SourceFunction::RustAssociatedFunction(func) => write!(f, "{func}"),
+            SourceFunction::JavaMethod(func) => write!(f, "{func}"),
+            SourceFunction::JavaAssociatedFunction(func) => write!(f, "{func}"),
+            SourceFunction::CSharpMethod(func) => write!(f, "{func}"),
+            SourceFunction::CSharpAssociatedFunction(func) => write!(f, "{func}"),
         }
     }
 }
 
-#[cfg(feature = "rhai")]
-impl rhai::CustomType for Function {
-    fn build(mut builder: rhai::TypeBuilder<Self>) {
-        builder
-            .with_name("Function")
-            .with_get_set(
-                "name",
-                |func: &mut Self| func.name().to_string(),
-                |func: &mut Self, val: String| {
-                    func.metadata_mut().name = val;
-                },
-            )
-            .with_get("language", |func: &mut Self| func.language())
-            .with_get_set(
-                "definition",
-                |func: &mut Self| func.definition().to_string(),
-                |func: &mut Self, val: String| {
-                    func.edit(None, val);
-                },
-            );
-    }
-}
+mod c;
+mod cpp;
+mod csharp;
+mod go;
+mod java;
+mod javascript;
+mod python;
+mod rust;
+mod typescript;
+
+pub use c::CFunction;
+pub use cpp::{CppAssociatedFunction, CppFunction, CppMethod};
+pub use csharp::{CSharpAssociatedFunction, CSharpMethod};
+pub use go::{GoFunction, GoMethod};
+pub use java::{JavaAssociatedFunction, JavaMethod};
+pub use javascript::{JavaScriptAssociatedFunction, JavaScriptFunction, JavaScriptMethod};
+pub use python::{PythonAssociatedFunction, PythonFunction, PythonMethod};
+pub use rust::{RustAssociatedFunction, RustFunction, RustMethod};
+pub use typescript::{TypeScriptAssociatedFunction, TypeScriptFunction, TypeScriptMethod};
+
+// pub struct ByteCodeFunction;
+pub struct AssemblyFunction;
+pub struct DecompiledFunction;
 
 pub(crate) struct ParsedFunctions {
     code: ParsedCode,

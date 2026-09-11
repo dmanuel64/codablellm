@@ -1,6 +1,6 @@
 use crate::storage;
 use clap::{Args, Subcommand, ValueEnum};
-use codablellm_core::Language;
+use codablellm_core::SourceLanguage;
 use color_eyre::eyre::Result;
 use figment::{
     Figment,
@@ -162,14 +162,14 @@ impl From<u8> for LogLevel {
 #[serde(rename_all = "kebab-case", default)]
 pub struct LanguagesConfig {
     pub headers_as_cpp: bool,
-    pub include: Vec<Language>,
+    pub include: Vec<SourceLanguage>,
 }
 
 impl Default for LanguagesConfig {
     fn default() -> Self {
         Self {
             headers_as_cpp: false,
-            include: Language::iter().collect(),
+            include: SourceLanguage::iter().collect(),
         }
     }
 }
@@ -215,7 +215,7 @@ enum Commands {
     },
     #[command(name = "languages.include")]
     Languages {
-        langs: Option<Vec<Language>>,
+        langs: Option<Vec<SourceLanguage>>,
         #[arg(long)]
         unset: bool,
     },

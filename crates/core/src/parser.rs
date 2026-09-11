@@ -9,7 +9,7 @@ use std::{
 
 use thiserror::Error as ThisError;
 
-use crate::Language;
+use crate::SourceLanguage;
 
 thread_local! {
     static PARSER: RefCell<tree_sitter::Parser> = RefCell::new({
@@ -37,19 +37,19 @@ pub enum Error {
 
 pub struct ParsedCode {
     tree: tree_sitter::Tree,
-    language: Language,
+    language: SourceLanguage,
     code: Vec<u8>,
     pub source: Option<PathBuf>,
     query: Option<tree_sitter::Query>,
     cursor: tree_sitter::QueryCursor,
 }
 
-pub fn parse(language: Language, text: impl Into<Vec<u8>>) -> Result<ParsedCode, Error> {
+pub fn parse(language: SourceLanguage, text: impl Into<Vec<u8>>) -> Result<ParsedCode, Error> {
     ParsedCode::new(language, text, None)
 }
 
 pub fn parse_file(file: &Path, headers_as_cpp: bool) -> Result<ParsedCode, Error> {
-    let Some(language) = Language::from_path(file) else {
+    let Some(language) = SourceLanguage::from_path(file) else {
         return Err(Error::UnknownLanguage {
             file: file.to_path_buf(),
         });
@@ -58,8 +58,8 @@ pub fn parse_file(file: &Path, headers_as_cpp: bool) -> Result<ParsedCode, Error
         .extension()
         .map(|ext| ext.eq_ignore_ascii_case("h"))
         .unwrap_or(false);
-    let language = if headers_as_cpp && language == Language::C && is_header {
-        Language::Cpp
+    let language = if headers_as_cpp && matches!(language, SourceLanguage::C) && is_header {
+        SourceLanguage::Cpp
     } else {
         language
     };
@@ -72,14 +72,14 @@ pub fn parse_file(file: &Path, headers_as_cpp: bool) -> Result<ParsedCode, Error
 
 impl ParsedCode {
     pub fn new(
-        language: Language,
+        language: SourceLanguage,
         text: impl Into<Vec<u8>>,
         source: Option<PathBuf>,
     ) -> Result<Self, Error> {
         let code = text.into();
         let tree = PARSER.with_borrow_mut(|parser| {
             parser
-                .set_language(&if let Language::TypeScript = language
+                .set_language(&if let SourceLanguage::TypeScript = language
                     && source
                         .as_ref()
                         .map(PathBuf::as_path)
@@ -108,7 +108,7 @@ impl ParsedCode {
         })
     }
 
-    pub fn language(&self) -> &Language {
+    pub fn language(&self) -> &SourceLanguage {
         &self.language
     }
 
