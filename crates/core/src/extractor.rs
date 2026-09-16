@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::{
     ProgressDisplay,
-    function::{Function, ParsedFunctions},
+    function::{ParsedFunctions, SourceFunction},
     parser::{self, ParsedCode},
     repo::Repository,
 };
@@ -19,20 +19,24 @@ pub enum Error {
     Parser(#[from] parser::Error),
     #[error("failed to transform function '{}': {source}", function.name())]
     Transform {
-        function: Function,
+        function: SourceFunction,
         source: anyhow::Error,
     },
 }
 
 pub enum Transform {
     Native(
-        Box<dyn for<'a> Fn(&'a Function) -> anyhow::Result<MaybeChangedFunction<'a>> + Send + Sync>,
+        Box<
+            dyn for<'a> Fn(&'a SourceFunction) -> anyhow::Result<MaybeChangedFunction<'a>>
+                + Send
+                + Sync,
+        >,
     ),
     #[cfg(feature = "rhai")]
     Rhai { file: PathBuf },
 }
 
-pub type MaybeChangedFunction<'a> = Cow<'a, Function>;
+pub type MaybeChangedFunction<'a> = Cow<'a, SourceFunction>;
 
 pub trait MaybeChangedFunctionExt {
     fn is_changed(&self) -> bool;
@@ -45,20 +49,25 @@ impl MaybeChangedFunctionExt for MaybeChangedFunction<'_> {
 }
 
 impl Transform {
-    pub fn apply<'a>(&self, function: &'a Function) -> Result<MaybeChangedFunction<'a>, Error> {
+    pub fn apply<'a>(
+        &self,
+        function: &'a SourceFunction,
+    ) -> Result<MaybeChangedFunction<'a>, Error> {
         match self {
             Transform::Native(f) => f(function),
             #[cfg(feature = "rhai")]
             Transform::Rhai { file } => {
                 let mut engine = rhai::Engine::new();
-                engine.register_type::<Function>();
+                engine.register_type::<SourceFunction>();
                 let mut scope = rhai::Scope::new();
                 scope.push("function", function.clone());
                 engine
                     .run_file_with_scope(&mut scope, file.clone())
                     .map(|_| {
+                        use crate::function::Function;
+
                         let new_function = scope
-                            .get_value_ref::<Function>("function")
+                            .get_value_ref::<SourceFunction>("function")
                             .unwrap_or(function);
                         if new_function.definition() == function.definition() {
                             Cow::Borrowed(function)
@@ -148,7 +157,7 @@ fn extract_file(
     path: &Path,
     transform: Option<&Transform>,
     headers_as_cpp: bool,
-) -> Result<Vec<Function>, Error> {
+) -> Result<Vec<SourceFunction>, Error> {
     let mut parsed_functions = ParsedFunctions::new(parser::parse_file(path, headers_as_cpp)?);
     if let Some(t) = transform {
         parsed_functions.edit(|f| match t.apply(f) {

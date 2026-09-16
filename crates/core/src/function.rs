@@ -1,3 +1,21 @@
+mod c;
+mod cpp;
+mod csharp;
+mod go;
+mod java;
+mod javascript;
+mod python;
+mod rust;
+mod typescript;
+
+pub use c::CFunction;
+pub use cpp::{CppAssociatedFunction, CppFunction, CppMethod};
+pub use csharp::{CSharpAssociatedFunction, CSharpMethod};
+pub use go::{GoFunction, GoMethod};
+pub use java::{JavaAssociatedFunction, JavaMethod};
+pub use javascript::{JavaScriptAssociatedFunction, JavaScriptFunction, JavaScriptMethod};
+pub use python::{PythonAssociatedFunction, PythonFunction, PythonMethod};
+pub use rust::{RustAssociatedFunction, RustFunction, RustMethod};
 use std::{
     borrow::Cow,
     fmt::Display,
@@ -5,6 +23,7 @@ use std::{
     path::{Path, PathBuf},
     str::Utf8Error,
 };
+pub use typescript::{TypeScriptAssociatedFunction, TypeScriptFunction, TypeScriptMethod};
 
 use indoc::indoc;
 use serde::{Deserialize, Serialize};
@@ -451,6 +470,37 @@ impl SourceFunction {
             SourceFunction::CSharpMethod(func) => Some(func.receiver()),
         }
     }
+
+    pub fn is_method(&self) -> bool {
+        self.receiver().is_some()
+    }
+
+    pub fn is_associated_function(&self) -> bool {
+        match self {
+            SourceFunction::CSharpAssociatedFunction(_)
+            | SourceFunction::CppAssociatedFunction(_)
+            | SourceFunction::JavaAssociatedFunction(_)
+            | SourceFunction::JavaScriptAssociatedFunction(_)
+            | SourceFunction::PythonAssociatedFunction(_)
+            | SourceFunction::RustAssociatedFunction(_)
+            | SourceFunction::TypeScriptAssociatedFunction(_) => true,
+            SourceFunction::CFunction(_)
+            | SourceFunction::CSharpMethod(_)
+            | SourceFunction::CppFunction(_)
+            | SourceFunction::CppMethod(_)
+            | SourceFunction::GoFunction(_)
+            | SourceFunction::GoMethod(_)
+            | SourceFunction::JavaMethod(_)
+            | SourceFunction::JavaScriptFunction(_)
+            | SourceFunction::JavaScriptMethod(_)
+            | SourceFunction::PythonFunction(_)
+            | SourceFunction::PythonMethod(_)
+            | SourceFunction::RustFunction(_)
+            | SourceFunction::RustMethod(_)
+            | SourceFunction::TypeScriptFunction(_)
+            | SourceFunction::TypeScriptMethod(_) => false,
+        }
+    }
 }
 
 impl Display for SourceFunction {
@@ -482,33 +532,13 @@ impl Display for SourceFunction {
     }
 }
 
-mod c;
-mod cpp;
-mod csharp;
-mod go;
-mod java;
-mod javascript;
-mod python;
-mod rust;
-mod typescript;
-
-pub use c::CFunction;
-pub use cpp::{CppAssociatedFunction, CppFunction, CppMethod};
-pub use csharp::{CSharpAssociatedFunction, CSharpMethod};
-pub use go::{GoFunction, GoMethod};
-pub use java::{JavaAssociatedFunction, JavaMethod};
-pub use javascript::{JavaScriptAssociatedFunction, JavaScriptFunction, JavaScriptMethod};
-pub use python::{PythonAssociatedFunction, PythonFunction, PythonMethod};
-pub use rust::{RustAssociatedFunction, RustFunction, RustMethod};
-pub use typescript::{TypeScriptAssociatedFunction, TypeScriptFunction, TypeScriptMethod};
-
 // pub struct ByteCodeFunction;
 pub struct AssemblyFunction;
 pub struct DecompiledFunction;
 
 pub(crate) struct ParsedFunctions {
     code: ParsedCode,
-    functions: Vec<Function>,
+    functions: Vec<SourceFunction>,
 }
 
 impl ParsedFunctions {
@@ -523,7 +553,7 @@ impl ParsedFunctions {
         &self.code
     }
 
-    fn functions_inner(&mut self) -> Result<Vec<Function>, Error> {
+    fn functions_inner(&mut self) -> Result<Vec<SourceFunction>, Error> {
         let language = *self.code.language();
         let sexp = get_function_sexp(&language);
         let source = self.code.source.clone();
@@ -569,7 +599,7 @@ impl ParsedFunctions {
         Ok(functions)
     }
 
-    pub fn functions(&mut self) -> Result<&[Function], Error> {
+    pub fn functions(&mut self) -> Result<&[SourceFunction], Error> {
         if self.functions.is_empty() {
             self.functions = self.functions_inner()?;
         }
@@ -578,7 +608,7 @@ impl ParsedFunctions {
 
     pub fn edit<EditFn>(&mut self, e: EditFn) -> Result<(), Error>
     where
-        EditFn: Fn(&mut Function),
+        EditFn: Fn(&mut SourceFunction),
     {
         if self.functions.is_empty() {
             self.functions = self.functions_inner()?;
