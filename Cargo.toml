@@ -1,3 +1,4 @@
 [workspace]
 members = ["crates/cli", "crates/pyo3", 'crates\core']
 default-members = ["crates/cli"]
+resolver = "3"

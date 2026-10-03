@@ -1,6 +1,59 @@
 [package]
 name = "codablellm-core"
-version = "2.0.0"
+version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+treesitter-types-c = { version = "1", optional = true }
+treesitter-types-c-sharp = { version = "1", optional = true }
+treesitter-types-cpp = { version = "1", optional = true }
+treesitter-types-elixir = { version = "1", optional = true }
+treesitter-types-go = { version = "1", optional = true }
+treesitter-types-haskell = { version = "1", optional = true }
+treesitter-types-java = { version = "1", optional = true }
+treesitter-types-javascript = { version = "1", optional = true }
+treesitter-types-lua = { version = "1", optional = true }
+treesitter-types-php = { version = "1", optional = true }
+treesitter-types-python = { version = "1", optional = true }
+treesitter-types-ruby = { version = "1", optional = true }
+treesitter-types-rust = { version = "1", optional = true }
+treesitter-types-scala = { version = "2", optional = true }
+treesitter-types-swift = { version = "1", optional = true }
+treesitter-types-typescript = { version = "1", optional = true }
+typetag = "0.2"
+
+[features]
+all-languages = [
+    "c",
+    "cpp",
+    "c-sharp",
+    "java",
+    "go",
+    "javascript",
+    "typescript",
+    "php",
+    "python",
+    "ruby",
+    "rust",
+    "scala",
+    "swift",
+    "lua",
+    "haskell",
+    "elixir",
+]
+c = ["dep:treesitter-types-c"]
+cpp = ["dep:treesitter-types-cpp"]
+c-sharp = ["dep:treesitter-types-c-sharp"]
+java = ["dep:treesitter-types-java"]
+go = ["dep:treesitter-types-go"]
+javascript = ["dep:treesitter-types-javascript"]
+typescript = ["dep:treesitter-types-typescript"]
+php = ["dep:treesitter-types-php"]
+python = ["dep:treesitter-types-python"]
+ruby = ["dep:treesitter-types-ruby"]
+rust = ["dep:treesitter-types-rust"]
+scala = ["dep:treesitter-types-scala"]
+swift = ["dep:treesitter-types-swift"]
+lua = ["dep:treesitter-types-lua"]
+haskell = ["dep:treesitter-types-haskell"]
+elixir = ["dep:treesitter-types-elixir"]

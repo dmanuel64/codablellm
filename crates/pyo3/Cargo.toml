@@ -1,6 +1,7 @@
 [package]
 name = "codablellm-pyo3"
-version = "0.1.0"
+version = "2.0.0"
 edition = "2024"
-
+# TODO: what should crate versions be since codablellm is already 1.0 on PyPi?
 [dependencies]
+codablellm-core = { version = "0.1", path = "../core" }
