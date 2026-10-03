@@ -5,3 +5,22 @@ edition = "2024"
 # TODO: what should crate versions be since codablellm is already 1.0 on PyPi?
 [dependencies]
 codablellm-core = { version = "0.1", path = "../core" }
+
+[features]
+all-languages = ["codablellm-core/all-languages"]
+c = ["codablellm-core/c"]
+cpp = ["codablellm-core/cpp"]
+c-sharp = ["codablellm-core/c-sharp"]
+java = ["codablellm-core/java"]
+go = ["codablellm-core/go"]
+javascript = ["codablellm-core/javascript"]
+typescript = ["codablellm-core/typescript"]
+php = ["codablellm-core/php"]
+python = ["codablellm-core/python"]
+ruby = ["codablellm-core/ruby"]
+rust = ["codablellm-core/rust"]
+scala = ["codablellm-core/scala"]
+swift = ["codablellm-core/swift"]
+lua = ["codablellm-core/lua"]
+haskell = ["codablellm-core/haskell"]
+elixir = ["codablellm-core/elixir"]
