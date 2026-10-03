@@ -7,3 +7,4 @@ edition = "2024"
 codablellm-core = { version = "0.1.0", path = "../core", features = [
     "all-languages",
 ] }
+serde_json = "1"

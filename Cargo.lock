@@ -47,6 +47,7 @@ name = "codablellm"
 version = "2.0.0"
 dependencies = [
  "codablellm-core",
+ "serde_json",
 ]
 
 [[package]]
