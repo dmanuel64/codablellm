@@ -1,24 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-use super::{Descriptor, Function, Method, ScopedFunction};
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GoFunction {
-    descriptor: Descriptor,
-}
-
-impl Function for GoFunction {
-    fn descriptor(&self) -> &Descriptor {
-        &self.descriptor
-    }
-}
-
-impl Display for GoFunction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(self as &dyn Function, f)
-    }
-}
+use crate::code::callable::Descriptor;
+use crate::code::callable::associated_function::ScopedFunction;
+use crate::code::callable::function::Function;
+use super::Method;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoMethod {

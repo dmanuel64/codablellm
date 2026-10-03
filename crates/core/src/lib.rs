@@ -1,11 +1,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod builder;
+pub mod code;
 pub(crate) mod container;
 pub mod dataset;
 pub mod decompiler;
 pub mod extractor;
-pub mod function;
 pub mod language;
 pub mod mapper;
 pub(crate) mod parser;
