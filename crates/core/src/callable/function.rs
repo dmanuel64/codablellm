@@ -1,7 +1,7 @@
 use crate::callable::{Callable, Language};
 
 pub trait IsFunction: Language {
-    fn is_function(callable: &Self::Callable) -> bool;
+    fn is_function(callable: &Self::Kind) -> bool;
 }
 
 impl<L: IsFunction> Callable<L> {
