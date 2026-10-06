@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[cfg(feature = "c")]
 pub use crate::callable::c::{C, Kind as CKind};
+pub use crate::callable::function::{Function, LocalFunction};
 
 pub trait Language: Clone + PartialEq {
     const NAME: &'static str;

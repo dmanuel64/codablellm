@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 pub mod callable;
 
 pub fn add(left: u64, right: u64) -> u64 {
