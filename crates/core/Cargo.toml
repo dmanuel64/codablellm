@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 tempfile = "3"
+thiserror = "2.0.21"
 tracing = "0.1"
 treesitter-types-c = { version = "1", optional = true }
 treesitter-types-c-sharp = { version = "1", optional = true }

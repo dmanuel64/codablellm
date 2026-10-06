@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Function {
-    pub return_value: Option<String>,
+    pub return_type: Option<String>,
 }
 
 impl Function {
     pub fn is_void(&self) -> bool {
-        self.return_value
+        self.return_type
             .as_ref()
             .is_none_or(|return_value| return_value.eq_ignore_ascii_case("void"))
     }

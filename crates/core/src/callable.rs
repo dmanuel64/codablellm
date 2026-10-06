@@ -11,7 +11,7 @@ use std::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[cfg(feature = "c")]
-pub use crate::callable::c::{C, Kind as CKind};
+pub use crate::callable::c::{C, Kind as CKind, ParseError as CParseError};
 pub use crate::callable::function::{Function, LocalFunction};
 
 pub trait Language: Clone + PartialEq {
@@ -136,17 +136,10 @@ impl Display for Position {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Callable<L: Language> {
     pub descriptor: Descriptor,
-    inner: L::Kind,
+    pub kind: L::Kind,
 }
 
 impl<L: Language> Callable<L> {
-    pub fn new(descriptor: Descriptor, callable: L::Kind) -> Self {
-        Self {
-            descriptor,
-            inner: callable,
-        }
-    }
-
     pub fn name(&self) -> Cow<'_, str> {
         descriptor_name(&self.descriptor)
     }
@@ -162,17 +155,13 @@ impl<L: Language> Callable<L> {
     pub fn language(&self) -> &'static str {
         L::NAME
     }
-
-    pub fn kind(&self) -> &L::Kind {
-        &self.inner
-    }
 }
 
 impl<L: Language> Deref for Callable<L> {
     type Target = L::Kind;
 
     fn deref(&self) -> &Self::Target {
-        self.kind()
+        &self.kind
     }
 }
 
