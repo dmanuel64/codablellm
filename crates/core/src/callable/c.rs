@@ -1,6 +1,7 @@
+#![cfg(feature = "c")]
 use serde::{Deserialize, Serialize};
 
-use crate::callable::{AnyCallable, Callable, Language, function::IsFunction};
+use crate::callable::{AnyCallable, Callable, Language, function::Function};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct C;
@@ -10,15 +11,16 @@ impl Language for C {
     type Kind = Kind;
 }
 
-impl IsFunction for C {
-    fn is_function(callable: &Self::Kind) -> bool {
-        matches!(callable, Kind::Function)
+impl AsRef<Function> for Callable<C> {
+    fn as_ref(&self) -> &Function {
+        let Kind::Function(function) = self.kind();
+        function
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Kind {
-    Function,
+    Function(Function),
 }
 
 impl From<Callable<C>> for AnyCallable {

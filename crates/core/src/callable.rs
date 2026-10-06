@@ -11,7 +11,7 @@ use std::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[cfg(feature = "c")]
-pub use crate::callable::c::C;
+pub use crate::callable::c::{C, Kind as CKind};
 
 pub trait Language: Clone + PartialEq {
     const NAME: &'static str;
@@ -161,13 +161,17 @@ impl<L: Language> Callable<L> {
     pub fn language(&self) -> &'static str {
         L::NAME
     }
+
+    pub fn kind(&self) -> &L::Kind {
+        &self.inner
+    }
 }
 
 impl<L: Language> Deref for Callable<L> {
     type Target = L::Kind;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        self.kind()
     }
 }
 
@@ -187,24 +191,28 @@ pub enum AnyCallable {
 impl AnyCallable {
     pub fn name(&self) -> Cow<'_, str> {
         match self {
+            #[cfg(feature = "c")]
             AnyCallable::C(callable) => callable.name(),
         }
     }
 
     pub fn definition(&self) -> &str {
         match self {
+            #[cfg(feature = "c")]
             AnyCallable::C(callable) => callable.definition(),
         }
     }
 
     pub fn location(&self) -> Option<&Location> {
         match self {
+            #[cfg(feature = "c")]
             AnyCallable::C(callable) => callable.location(),
         }
     }
 
     pub fn language(&self) -> &'static str {
         match self {
+            #[cfg(feature = "c")]
             AnyCallable::C(callable) => callable.language(),
         }
     }

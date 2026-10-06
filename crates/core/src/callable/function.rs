@@ -1,11 +1,17 @@
+use serde::{Deserialize, Serialize};
+
 use crate::callable::{Callable, Language};
 
-pub trait IsFunction: Language {
-    fn is_function(callable: &Self::Kind) -> bool;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Function {
+    pub return_value: Option<String>,
 }
 
-impl<L: IsFunction> Callable<L> {
-    pub fn is_function(&self) -> bool {
-        L::is_function(self)
-    }
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LocalFunction {
+    pub parent: Function,
+    pub inner: Function,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AnonymousFunction(pub Function);
