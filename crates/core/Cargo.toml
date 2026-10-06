@@ -23,7 +23,6 @@ treesitter-types-rust = { version = "1", optional = true }
 treesitter-types-scala = { version = "2", optional = true }
 treesitter-types-swift = { version = "1", optional = true }
 treesitter-types-typescript = { version = "1", optional = true }
-typetag = "0.2"
 
 [features]
 all-languages = [
