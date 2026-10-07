@@ -3,9 +3,10 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use treesitter_types_c::*;
 
 use crate::callable::{
-    AnyCallable, Callable, Descriptor, Language, Location, Name, function::Function,
+    AnyCallable, Callable, Descriptor, Language, Name, Source, function::Function,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -13,7 +14,32 @@ pub struct C;
 
 impl Language for C {
     const NAME: &'static str = "C";
+    const FILE_EXTENSIONS: &[&str] = &[".c", ".h"];
     type Kind = Kind;
+    type ParseError = ParseError;
+
+    fn parse(source: &super::Source) -> Vec<Result<Callable<Self>, Self::ParseError>> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_c::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(source.text, None).unwrap();
+        let tu = TranslationUnit::from_node(tree.root_node(), source.text.as_bytes()).unwrap();
+        tu.children
+            .iter()
+            .flat_map(|node| match node {
+                TranslationUnitChildren::FunctionDefinition(function_definition) => {
+                    vec![function_definition]
+                }
+                // TranslationUnitChildren::PreprocIf(preproc_if) => todo!(),
+                // TranslationUnitChildren::PreprocIfdef(preproc_ifdef) => todo!(),
+                _ => vec![],
+            })
+            .map(|function_definition| {
+                Callable::<C>::callable_from_node(function_definition, source)
+            })
+            .collect()
+    }
 }
 
 impl AsRef<Function> for Callable<C> {
@@ -35,57 +61,25 @@ impl From<Callable<C>> for AnyCallable {
 }
 
 impl Callable<C> {
-    pub fn test_3(&self) {
-        unreachable!()
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum ParseError {
-    #[error("failed to locate the function definition")]
-    MissingFunctionDefinition,
-    #[error("failed to locate the function declaration")]
-    MissingFunctionDeclarator,
-    #[error("failed to locate the function identifier")]
-    MissingFunctionIdentifier,
-    #[error(transparent)]
-    Other(#[from] treesitter_types_c::ParseError),
-}
-
-impl FromStr for Callable<C> {
-    type Err = ParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        use treesitter_types_c::*;
-
-        let mut parser = tree_sitter::Parser::new();
-        parser
-            .set_language(&tree_sitter_c::LANGUAGE.into())
-            .unwrap();
-        let tree = parser.parse(s, None).unwrap();
-        let translation_unit = TranslationUnit::from_node(tree.root_node(), s.as_bytes())?;
-        // TODO: maybe return an error if there is more than one child node?
-        let Some(TranslationUnitChildren::FunctionDefinition(function)) =
-            &translation_unit.children.first()
-        else {
-            return Err(Self::Err::MissingFunctionDefinition);
-        };
-
+    fn callable_from_node(
+        function: &FunctionDefinition,
+        source: &Source,
+    ) -> Result<Callable<C>, ParseError> {
         // Extract the function name
         let Declarator::FunctionDeclarator(function_declarator) = &function.declarator else {
-            return Err(Self::Err::MissingFunctionDeclarator);
+            return Err(<C as Language>::ParseError::MissingFunctionDeclarator);
         };
         let FunctionDeclaratorDeclarator::Declarator(declarator) = &function_declarator.declarator
         else {
-            return Err(Self::Err::MissingFunctionDeclarator);
+            return Err(<C as Language>::ParseError::MissingFunctionDeclarator);
         };
         let Declarator::Identifier(identifier) = &**declarator else {
-            return Err(Self::Err::MissingFunctionIdentifier);
+            return Err(<C as Language>::ParseError::MissingFunctionIdentifier);
         };
         let name = identifier.text().to_string();
 
         // Extract the function definition
-        let definition = s.trim().to_string();
+        let definition = source.text.trim().to_string();
 
         // Extract the function return type
         let return_type = match &function.r#type {
@@ -138,5 +132,35 @@ impl FromStr for Callable<C> {
             },
             kind: Kind::Function(Function { return_type }),
         })
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("failed to locate the function definition")]
+    MissingFunctionDefinition,
+    #[error("failed to locate the function declaration")]
+    MissingFunctionDeclarator,
+    #[error("failed to locate the function identifier")]
+    MissingFunctionIdentifier,
+    #[error("expected only one definition")]
+    MultipleDefinitions,
+    #[error(transparent)]
+    Other(#[from] treesitter_types_c::ParseError),
+}
+
+impl FromStr for Callable<C> {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut callables = C::parse(&Source {
+            text: s,
+            path: None,
+        });
+        match callables.len() {
+            1 => Ok(callables.remove(0)?),
+            0 => Err(ParseError::MissingFunctionDefinition),
+            _ => Err(ParseError::MultipleDefinitions),
+        }
     }
 }

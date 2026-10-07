@@ -14,9 +14,19 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 pub use crate::callable::c::{C, Kind as CKind, ParseError as CParseError};
 pub use crate::callable::function::{Function, LocalFunction};
 
+#[derive(Debug)]
+pub struct Source<'a> {
+    pub text: &'a str,
+    pub path: Option<&'a Path>,
+}
+
 pub trait Language: Clone + PartialEq {
-    const NAME: &'static str;
+    const NAME: &str;
+    const FILE_EXTENSIONS: &[&str];
     type Kind: Debug + Clone + PartialEq + Serialize + DeserializeOwned;
+    type ParseError: std::error::Error;
+
+    fn parse(source: &Source) -> Vec<Result<Callable<Self>, Self::ParseError>>;
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -24,6 +34,18 @@ pub struct Descriptor {
     pub name: Option<Name>,
     pub definition: String,
     pub location: Option<Location>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Definition {
+    pub text: String,
+    pub location: Option<Location>,
+}
+
+impl Display for Definition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
 }
 
 fn descriptor_name(descriptor: &Descriptor) -> Cow<'_, str> {
@@ -173,6 +195,7 @@ impl<L: Language> Display for Callable<L> {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum AnyCallable {
     #[cfg(feature = "c")]
     C(Callable<C>),
