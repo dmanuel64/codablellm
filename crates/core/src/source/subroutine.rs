@@ -1,9 +1,18 @@
-use std::path::Path;
-use std::{fmt::Display, ops::Range};
+use std::{
+    any::Any,
+    fmt::{Debug, Display},
+    ops::Range,
+};
 
 use crop::{Rope, RopeSlice};
 
 use crate::source::Language;
+
+pub trait Callable: Debug + Any {
+    fn name(&self) -> Option<RopeSlice<'_>>;
+    fn definition(&self) -> RopeSlice<'_>;
+    fn span(&self) -> &Range<usize>;
+}
 
 #[derive(Debug, Clone)]
 pub struct Subroutine<L: Language> {
@@ -12,6 +21,21 @@ pub struct Subroutine<L: Language> {
     definition_span: Range<usize>,
     #[allow(unused)]
     extra: L::Extra,
+}
+impl<L: Language> Callable for Subroutine<L> {
+    fn name(&self) -> Option<RopeSlice<'_>> {
+        self.name_span
+            .as_ref()
+            .map(|span| self.code.byte_slice(span.clone()))
+    }
+
+    fn definition(&self) -> RopeSlice<'_> {
+        self.code.byte_slice(self.definition_span.clone())
+    }
+
+    fn span(&self) -> &Range<usize> {
+        &self.definition_span
+    }
 }
 
 impl<L: Language> Subroutine<L> {
@@ -27,16 +51,6 @@ impl<L: Language> Subroutine<L> {
             definition_span,
             extra,
         }
-    }
-
-    pub fn name(&self) -> Option<RopeSlice<'_>> {
-        self.name_span
-            .as_ref()
-            .map(|span| self.code.byte_slice(span.clone()))
-    }
-
-    pub fn definition(&self) -> RopeSlice<'_> {
-        self.code.byte_slice(self.definition_span.clone())
     }
 }
 

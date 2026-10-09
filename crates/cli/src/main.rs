@@ -1,9 +1,13 @@
-use codablellm_core::source::{C, Subroutine};
+use codablellm_core::source::{AnyCode, C, Source, Subroutine};
 
 fn foo() -> Subroutine<C> {
     unimplemented!()
 }
 
+fn bar() -> AnyCode {
+    unimplemented!()
+}
+
 fn main() {
-    foo().is_void();
+    let b = bar().as_c().unwrap().callables().first().unwrap();
 }

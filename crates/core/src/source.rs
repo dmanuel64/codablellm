@@ -1,14 +1,22 @@
 mod c;
-pub mod subroutine;
+mod subroutine;
 
-use std::{any::Any, fmt::Display, ops::Range, sync::Arc};
+use std::{
+    any::Any,
+    fmt::{Debug, Display},
+    ops::Range,
+    sync::Arc,
+};
 
 use crop::{Rope, RopeSlice};
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "c")]
-pub use crate::source::c::{C, Extra as CCallable};
-pub use crate::source::subroutine::Subroutine;
+pub use crate::source::c::C;
+use crate::source::subroutine::Callable;
+pub use crate::source::subroutine::{
+    AssociatedFunction, Function, Method, Scope, StaticMethod, Subroutine,
+};
 
 pub trait Tree<L: Language> {
     type ParseError: std::error::Error;
@@ -44,8 +52,14 @@ pub trait Language: Sized + std::fmt::Debug + Clone + 'static {
     fn parse(text: &str) -> Result<Self::Tree, Self::ParseError>;
 }
 
+pub trait Source: Debug + Any {
+    fn language(&self) -> &str;
+    fn text(&self) -> Rope;
+    fn callables(&self) -> Vec<&dyn Callable>;
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(try_from = "CodeRepr", bound(deserialize = ""))]
+#[serde(try_from = "CodeRepr")]
 pub struct Code<L: Language> {
     text: Rope,
     #[serde(skip)]
@@ -62,6 +76,24 @@ impl<L: Language> TryFrom<CodeRepr> for Code<L> {
 
     fn try_from(repr: CodeRepr) -> Result<Self, Self::Error> {
         Code::new(&repr.text.to_string())
+    }
+}
+
+impl<L: Language> Source for Code<L> {
+    fn language(&self) -> &str {
+        L::NAME
+    }
+
+    fn text(&self) -> Rope {
+        self.text.clone()
+    }
+
+    fn callables(&self) -> Vec<&dyn Callable> {
+        self.subroutines
+            .iter()
+            .filter_map(|subroutine| subroutine.as_ref().ok())
+            .map(|s| s as &dyn Callable)
+            .collect()
     }
 }
 
@@ -85,10 +117,6 @@ impl<L: Language> Code<L> {
 
     pub fn has_errors(&self) -> bool {
         self.subroutines.iter().any(Result::is_err)
-    }
-
-    pub fn text(&self) -> Rope {
-        self.text.clone()
     }
 
     pub fn subroutines(&self) -> &[Result<Subroutine<L>, L::ParseError>] {
@@ -135,11 +163,21 @@ impl<L: Language> Code<L> {
             .collect();
         Ok(return_value)
     }
-}
 
-impl<L: Language> From<Code<L>> for AnyCode {
-    fn from(value: Code<L>) -> Self {
-        AnyCode(Arc::new(Box::new(value)))
+    pub fn edit_definition(
+        &mut self,
+        subroutine: &Subroutine<L>,
+        new_definition: &str,
+    ) -> Result<(), L::ParseError> {
+        self.edit_with(|code| code.replace(subroutine.span().clone(), new_definition))
+    }
+
+    pub fn edit_definition_strict(
+        &mut self,
+        subroutine: &Subroutine<L>,
+        new_definition: &str,
+    ) -> Result<(), L::ParseError> {
+        self.edit_with_strict(|code| code.replace(subroutine.span().clone(), new_definition))
     }
 }
 
@@ -150,16 +188,37 @@ impl<L: Language> Display for Code<L> {
     }
 }
 
+impl<L: Language> From<Code<L>> for AnyCode {
+    fn from(value: Code<L>) -> Self {
+        AnyCode(Arc::new(value))
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct AnyCode(Arc<Box<dyn Any>>);
+pub struct AnyCode(Arc<dyn Source>);
+
+impl Source for AnyCode {
+    fn language(&self) -> &str {
+        self.0.language()
+    }
+
+    fn text(&self) -> Rope {
+        self.0.text()
+    }
+
+    fn callables(&self) -> Vec<&dyn Callable> {
+        self.0.callables()
+    }
+}
 
 impl AnyCode {
     pub fn as_language<L: Language>(&self) -> Option<&Code<L>> {
-        self.0.downcast_ref::<Code<L>>()
+        let any: &dyn Any = &*self.0;
+        any.downcast_ref::<Code<L>>()
     }
 
     #[cfg(feature = "c")]
     pub fn as_c(&self) -> Option<&Code<C>> {
-        self.as_language::<C>()
+        self.as_language()
     }
 }
