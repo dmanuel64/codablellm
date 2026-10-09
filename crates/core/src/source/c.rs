@@ -23,12 +23,12 @@ impl Language for C {
     type ParseError = treesitter_types_c::ParseError;
     type Extra = Extra;
 
-    fn parse(text: &str) -> Result<Self::Tree, Self::ParseError> {
+    fn reparse(text: &str, old_tree: Option<&Self::Tree>) -> Result<Self::Tree, Self::ParseError> {
         let mut parser = tree_sitter::Parser::new();
         parser
             .set_language(&tree_sitter_c::LANGUAGE.into())
             .expect("tree-sitter-c version mismatch");
-        Ok(parser.parse(text, None).expect("language is set"))
+        Ok(parser.parse(text, old_tree).expect("language is set"))
     }
 
     fn subroutines(

@@ -38,9 +38,13 @@ pub trait Language: Sized + Debug + Clone + 'static {
     type ParseError: std::error::Error;
     type Extra: std::fmt::Debug + Clone;
 
-    fn parse(text: &str) -> Result<Self::Tree, Self::ParseError>;
+    fn reparse(text: &str, old_tree: Option<&Self::Tree>) -> Result<Self::Tree, Self::ParseError>;
     fn subroutines(code: &Arc<ParsedCode<Self>>)
     -> Vec<Result<Subroutine<Self>, Self::ParseError>>;
+
+    fn parse(text: &str) -> Result<Self::Tree, Self::ParseError> {
+        Self::reparse(text, None)
+    }
 }
 
 // TODO: ParsedCode name is somewhat confusing with higher-level Code<L>
@@ -74,7 +78,7 @@ impl<L: Language> Serialize for Code<L> {
 impl<'de, L: Language> Deserialize<'de> for Code<L> {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let text = Rope::deserialize(d)?;
-        Self::build(text, false).map_err(serde::de::Error::custom)
+        Self::build(text, false, None).map_err(serde::de::Error::custom)
     }
 }
 
@@ -97,8 +101,8 @@ impl<L: Language> Source for Code<L> {
 }
 
 impl<L: Language> Code<L> {
-    fn build(text: Rope, strict: bool) -> Result<Self, L::ParseError> {
-        let tree = L::parse(&text.to_string())?;
+    fn build(text: Rope, strict: bool, old_tree: Option<&L::Tree>) -> Result<Self, L::ParseError> {
+        let tree = L::reparse(&text.to_string(), old_tree)?;
         let parsed = Arc::new(ParsedCode { text, tree });
         let mut subroutines = L::subroutines(&parsed);
         if strict {
@@ -116,11 +120,11 @@ impl<L: Language> Code<L> {
     }
 
     pub fn new(text: &str) -> Result<Self, L::ParseError> {
-        Self::build(Rope::from(text), false)
+        Self::build(Rope::from(text), false, None)
     }
 
     pub fn new_strict(text: &str) -> Result<Self, L::ParseError> {
-        Self::build(Rope::from(text), true)
+        Self::build(Rope::from(text), true, None)
     }
 
     pub fn has_errors(&self) -> bool {
@@ -153,7 +157,7 @@ impl<L: Language> Code<L> {
     ) -> Result<R, L::ParseError> {
         let mut text = self.parsed.text.clone();
         let r = f(&mut text);
-        *self = Self::build(text, strict)?;
+        *self = Self::build(text, strict, Some(&self.parsed.tree))?;
         Ok(r)
     }
 
