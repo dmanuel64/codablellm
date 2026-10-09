@@ -18,7 +18,7 @@ impl Language for C {
 
     type ParseError = treesitter_types_c::ParseError;
 
-    type Callable = Extra;
+    type Extra = Extra;
 
     fn parse(text: &str) -> Result<Self::Tree, Self::ParseError> {
         let mut parser = tree_sitter::Parser::new();

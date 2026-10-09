@@ -1,7 +1,7 @@
 mod c;
 pub mod subroutine;
 
-use std::{fmt::Display, ops::Range};
+use std::{any::Any, fmt::Display, ops::Range, sync::Arc};
 
 use crop::Rope;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -17,13 +17,13 @@ pub trait Tree<L: Language> {
     fn subroutine_at_span(&self, span: &Range<usize>) -> Result<Subroutine<L>, Self::ParseError>;
 }
 
-pub trait Language: Sized + std::fmt::Debug + Clone {
+pub trait Language: Sized + std::fmt::Debug + Clone + 'static {
     const NAME: &str;
     const FILE_EXTENSIONS: &[&str];
 
     type Tree: Tree<Self, ParseError = Self::ParseError>;
     type ParseError: std::error::Error;
-    type Callable: std::fmt::Debug + Clone;
+    type Extra: std::fmt::Debug + Clone;
 
     fn parse(text: &str) -> Result<Self::Tree, Self::ParseError>;
 }
@@ -80,6 +80,12 @@ impl<L: Language> Code<L> {
     }
 }
 
+impl<L: Language> From<Code<L>> for AnyCode {
+    fn from(value: Code<L>) -> Self {
+        AnyCode(Box::new(value))
+    }
+}
+
 impl<L: Language> Display for Code<L> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let text = &self.text;
@@ -87,20 +93,16 @@ impl<L: Language> Display for Code<L> {
     }
 }
 
-#[derive(Debug)]
-pub enum AnyCode {
-    #[cfg(feature = "c")]
-    C(Code<C>),
-    Other(String),
-}
+#[derive(Debug, Clone)]
+pub struct AnyCode(Arc<Box<dyn Any>>);
 
 impl AnyCode {
+    pub fn as_language<L: Language>(&self) -> Option<&Code<L>> {
+        self.0.downcast_ref::<Code<L>>()
+    }
+
     #[cfg(feature = "c")]
     pub fn as_c(&self) -> Option<&Code<C>> {
-        if let AnyCode::C(code) = self {
-            Some(code)
-        } else {
-            None
-        }
+        self.as_language::<C>()
     }
 }

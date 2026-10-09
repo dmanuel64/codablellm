@@ -9,17 +9,17 @@ pub struct Subroutine<L: Language> {
     code: Rope,
     name_span: Option<Range<usize>>,
     definition_span: Range<usize>,
-    pub extra: L::Callable,
+    extra: L::Extra,
 }
 
 impl<L: Language> Subroutine<L> {
-    pub fn name(&self) -> Option<RopeSlice> {
+    pub fn name(&self) -> Option<RopeSlice<'_>> {
         self.name_span
             .as_ref()
             .map(|span| self.code.byte_slice(span.clone()))
     }
 
-    pub fn definition(&self) -> RopeSlice {
+    pub fn definition(&self) -> RopeSlice<'_> {
         self.code.byte_slice(self.definition_span.clone())
     }
 }
