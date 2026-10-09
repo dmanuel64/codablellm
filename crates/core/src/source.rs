@@ -4,7 +4,6 @@ mod subroutine;
 use std::{
     any::Any,
     fmt::{Debug, Display},
-    ops::Range,
     sync::Arc,
 };
 
@@ -18,64 +17,64 @@ pub use crate::source::subroutine::{
     AssociatedFunction, Function, Method, Scope, StaticMethod, Subroutine,
 };
 
-pub trait Tree<L: Language> {
-    type ParseError: std::error::Error;
-
-    fn subroutine_spans(&self) -> Vec<Range<usize>>;
-    fn subroutine_at_span(&self, span: &Range<usize>) -> Result<Subroutine<L>, Self::ParseError>;
+pub trait Source: Debug + Any {
+    fn language(&self) -> &str;
+    fn text(&self) -> &Rope;
+    fn callables(&self) -> Vec<&dyn Callable>;
 }
 
-fn tree_subroutines<L: Language>(tree: &L::Tree) -> Vec<Result<Subroutine<L>, L::ParseError>> {
-    tree.subroutine_spans()
-        .iter()
-        .map(|span| tree.subroutine_at_span(span))
-        .collect()
+impl Display for dyn Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let text = self.text();
+        write!(f, "{text}")
+    }
 }
 
-fn tree_subroutines_strict<L: Language>(
-    tree: &L::Tree,
-) -> Result<Vec<Subroutine<L>>, L::ParseError> {
-    tree.subroutine_spans()
-        .iter()
-        .map(|span| tree.subroutine_at_span(span))
-        .collect()
-}
-
-pub trait Language: Sized + std::fmt::Debug + Clone + 'static {
+pub trait Language: Sized + Debug + Clone + 'static {
     const NAME: &str;
     const FILE_EXTENSIONS: &[&str];
 
-    type Tree: Tree<Self, ParseError = Self::ParseError>;
+    type Tree: Debug;
     type ParseError: std::error::Error;
     type Extra: std::fmt::Debug + Clone;
 
     fn parse(text: &str) -> Result<Self::Tree, Self::ParseError>;
+    fn subroutines(code: &Arc<ParsedCode<Self>>)
+    -> Vec<Result<Subroutine<Self>, Self::ParseError>>;
 }
 
-pub trait Source: Debug + Any {
-    fn language(&self) -> &str;
-    fn text(&self) -> Rope;
-    fn callables(&self) -> Vec<&dyn Callable>;
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(try_from = "CodeRepr")]
-pub struct Code<L: Language> {
+// TODO: ParsedCode name is somewhat confusing with higher-level Code<L>
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ParsedCode<L: Language> {
     text: Rope,
     #[serde(skip)]
-    subroutines: Vec<Result<Subroutine<L>, L::ParseError>>,
+    tree: L::Tree,
 }
 
-#[derive(Deserialize)]
-struct CodeRepr {
-    text: Rope,
+impl<L: Language> ParsedCode<L> {
+    pub fn tree(&self) -> &L::Tree {
+        &self.tree
+    }
 }
 
-impl<L: Language> TryFrom<CodeRepr> for Code<L> {
-    type Error = L::ParseError;
+type Subroutines<L> = Arc<[Result<Subroutine<L>, <L as Language>::ParseError>]>;
 
-    fn try_from(repr: CodeRepr) -> Result<Self, Self::Error> {
-        Code::new(&repr.text.to_string())
+#[derive(Debug, Clone)]
+pub struct Code<L: Language> {
+    parsed: Arc<ParsedCode<L>>,
+    subroutines: Subroutines<L>,
+}
+
+impl<L: Language> Serialize for Code<L> {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.parsed.text.serialize(s)
+    }
+}
+
+impl<'de, L: Language> Deserialize<'de> for Code<L> {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let text = Rope::deserialize(d)?;
+        Self::build(text, false).map_err(serde::de::Error::custom)
     }
 }
 
@@ -84,35 +83,44 @@ impl<L: Language> Source for Code<L> {
         L::NAME
     }
 
-    fn text(&self) -> Rope {
-        self.text.clone()
+    fn text(&self) -> &Rope {
+        &self.parsed.text
     }
 
     fn callables(&self) -> Vec<&dyn Callable> {
         self.subroutines
             .iter()
-            .filter_map(|subroutine| subroutine.as_ref().ok())
+            .filter_map(|s| s.as_ref().ok())
             .map(|s| s as &dyn Callable)
             .collect()
     }
 }
 
 impl<L: Language> Code<L> {
+    fn build(text: Rope, strict: bool) -> Result<Self, L::ParseError> {
+        let tree = L::parse(&text.to_string())?;
+        let parsed = Arc::new(ParsedCode { text, tree });
+        let mut subroutines = L::subroutines(&parsed);
+        if strict {
+            subroutines = subroutines
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .map(Ok)
+                .collect();
+        }
+        Ok(Self {
+            parsed,
+            subroutines: subroutines.into(),
+        })
+    }
+
     pub fn new(text: &str) -> Result<Self, L::ParseError> {
-        let tree = L::parse(text)?;
-        let text = Rope::from(text);
-        let subroutines = tree_subroutines(&tree);
-        Ok(Self { text, subroutines })
+        Self::build(Rope::from(text), false)
     }
 
     pub fn new_strict(text: &str) -> Result<Self, L::ParseError> {
-        let tree = L::parse(text)?;
-        let text = Rope::from(text);
-        let subroutines = tree_subroutines_strict(&tree)?
-            .into_iter()
-            .map(Ok)
-            .collect();
-        Ok(Self { text, subroutines })
+        Self::build(Rope::from(text), true)
     }
 
     pub fn has_errors(&self) -> bool {
@@ -120,7 +128,7 @@ impl<L: Language> Code<L> {
     }
 
     pub fn subroutines(&self) -> &[Result<Subroutine<L>, L::ParseError>] {
-        self.subroutines.as_slice()
+        &self.subroutines
     }
 
     pub fn find_subroutine(&self, qualified_identifier: &str) -> Option<&Subroutine<L>> {
@@ -138,38 +146,34 @@ impl<L: Language> Code<L> {
             .flatten()
     }
 
-    pub fn edit_with<EditFn, R>(&mut self, f: EditFn) -> Result<R, L::ParseError>
-    where
-        EditFn: FnOnce(&mut Rope) -> R,
-    {
-        let old = self.text.clone();
-        let return_value = f(&mut self.text);
-        let tree = L::parse(&self.text.to_string()).inspect_err(|_| self.text = old)?;
-        self.subroutines = tree_subroutines(&tree);
-        Ok(return_value)
-    }
-
-    pub fn edit_with_strict<EditFn, R>(&mut self, f: EditFn) -> Result<R, L::ParseError>
-    where
-        EditFn: FnOnce(&mut Rope) -> R,
-    {
-        let old = self.text.clone();
-        let return_value = f(&mut self.text);
-        let tree = L::parse(&self.text.to_string()).inspect_err(|_| self.text = old.clone())?;
-        self.subroutines = tree_subroutines_strict(&tree)
-            .inspect_err(|_| self.text = old)?
-            .into_iter()
-            .map(Ok)
-            .collect();
-        Ok(return_value)
-    }
-
-    pub fn edit_definition(
+    fn edit<R>(
         &mut self,
-        subroutine: &Subroutine<L>,
-        new_definition: &str,
-    ) -> Result<(), L::ParseError> {
-        self.edit_with(|code| code.replace(subroutine.span().clone(), new_definition))
+        f: impl FnOnce(&mut Rope) -> R,
+        strict: bool,
+    ) -> Result<R, L::ParseError> {
+        let mut text = self.parsed.text.clone();
+        let r = f(&mut text);
+        *self = Self::build(text, strict)?;
+        Ok(r)
+    }
+
+    pub fn edit_with<R>(&mut self, f: impl FnOnce(&mut Rope) -> R) -> Result<R, L::ParseError> {
+        self.edit(f, false)
+    }
+
+    pub fn edit_with_strict<R>(
+        &mut self,
+        f: impl FnOnce(&mut Rope) -> R,
+    ) -> Result<R, L::ParseError> {
+        self.edit(f, true)
+    }
+
+    pub fn edit_definition(&mut self, s: &Subroutine<L>, new: &str) -> Result<(), L::ParseError> {
+        debug_assert!(
+            Arc::ptr_eq(s.source(), &self.parsed),
+            "subroutine is from an older version"
+        );
+        self.edit_with(|text| text.replace(s.span().clone(), new))
     }
 
     pub fn edit_definition_strict(
@@ -183,8 +187,8 @@ impl<L: Language> Code<L> {
 
 impl<L: Language> Display for Code<L> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let text = &self.text;
-        write!(f, "{text}")
+        let source: &dyn Source = self;
+        write!(f, "{source}")
     }
 }
 
@@ -202,7 +206,7 @@ impl Source for AnyCode {
         self.0.language()
     }
 
-    fn text(&self) -> Rope {
+    fn text(&self) -> &Rope {
         self.0.text()
     }
 
@@ -220,5 +224,12 @@ impl AnyCode {
     #[cfg(feature = "c")]
     pub fn as_c(&self) -> Option<&Code<C>> {
         self.as_language()
+    }
+}
+
+impl Display for AnyCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let source = &self.0;
+        write!(f, "{source}")
     }
 }

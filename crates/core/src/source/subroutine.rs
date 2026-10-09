@@ -2,21 +2,22 @@ use std::{
     any::Any,
     fmt::{Debug, Display},
     ops::Range,
+    sync::Arc,
 };
 
-use crop::{Rope, RopeSlice};
+use crop::RopeSlice;
 
-use crate::source::Language;
+use crate::source::{Language, ParsedCode};
 
 pub trait Callable: Debug + Any {
     fn name(&self) -> Option<RopeSlice<'_>>;
     fn definition(&self) -> RopeSlice<'_>;
-    fn span(&self) -> &Range<usize>;
+    fn span(&self) -> Range<usize>;
 }
 
 #[derive(Debug, Clone)]
 pub struct Subroutine<L: Language> {
-    code: Rope,
+    source: Arc<ParsedCode<L>>,
     name_span: Option<Range<usize>>,
     definition_span: Range<usize>,
     #[allow(unused)]
@@ -26,58 +27,68 @@ impl<L: Language> Callable for Subroutine<L> {
     fn name(&self) -> Option<RopeSlice<'_>> {
         self.name_span
             .as_ref()
-            .map(|span| self.code.byte_slice(span.clone()))
+            .map(|span| self.source.text.byte_slice(span.clone()))
     }
 
     fn definition(&self) -> RopeSlice<'_> {
-        self.code.byte_slice(self.definition_span.clone())
+        self.source.text.byte_slice(self.definition_span.clone())
     }
 
-    fn span(&self) -> &Range<usize> {
-        &self.definition_span
+    fn span(&self) -> Range<usize> {
+        self.definition_span.clone()
     }
 }
 
 impl<L: Language> Subroutine<L> {
     pub fn new(
-        code: Rope,
+        source: Arc<ParsedCode<L>>,
         name_span: Option<Range<usize>>,
         definition_span: Range<usize>,
         extra: L::Extra,
     ) -> Self {
         Self {
-            code,
+            source,
             name_span,
             definition_span,
             extra,
         }
     }
+
+    pub fn source(&self) -> &Arc<ParsedCode<L>> {
+        &self.source
+    }
+
+    pub fn extra(&self) -> &L::Extra {
+        &self.extra
+    }
 }
 
 impl<L: Language> Display for Subroutine<L> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let code = &self.code;
-        write!(f, "{code}")
+        let definition = self.definition();
+        write!(f, "{definition}")
+    }
+}
+
+pub trait Function: Language {
+    fn return_type_span(subroutine: &Subroutine<Self>) -> Option<Range<usize>>;
+
+    fn is_void(subroutine: &Subroutine<Self>) -> bool {
+        subroutine
+            .return_type()
+            .is_none_or(|t| t == "void" || t == "()")
     }
 }
 
 impl<L: Function> Subroutine<L> {
     pub fn return_type(&self) -> Option<RopeSlice<'_>> {
         let return_type_span = L::return_type_span(self);
-        return_type_span.map(|span| self.code.byte_slice(span.clone()))
+        return_type_span.map(|span| self.source.text.byte_slice(span.clone()))
     }
 
     pub fn is_void(&self) -> bool {
-        self.return_type()
-            .map(|slice| slice.to_string())
-            .is_none_or(|return_type| {
-                return_type.eq_ignore_ascii_case("void") || return_type == "()"
-            })
+        L::is_void(self)
     }
-}
-
-pub trait Function: Language {
-    fn return_type_span(subroutine: &Subroutine<Self>) -> Option<&Range<usize>>;
 }
 
 pub trait Scope: Language {
@@ -95,13 +106,13 @@ impl<L: Scope> Subroutine<L> {
 }
 
 pub trait AssociatedFunction: Scope + Function {
-    fn associated_type_span(subroutine: &Subroutine<Self>) -> Option<&Range<usize>>;
+    fn associated_type_span(subroutine: &Subroutine<Self>) -> Option<Range<usize>>;
 }
 
 impl<L: AssociatedFunction> Subroutine<L> {
     pub fn associated_type(&self) -> Option<RopeSlice<'_>> {
         let associated_type_span = L::associated_type_span(self);
-        associated_type_span.map(|span| self.code.byte_slice(span.clone()))
+        associated_type_span.map(|span| self.source.text.byte_slice(span.clone()))
     }
 }
 
