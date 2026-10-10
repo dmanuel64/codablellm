@@ -1,12 +1,15 @@
 #![cfg(feature = "c")]
 
-use crate::source::Source;
 use std::{ops::Range, sync::Arc};
 
-use treesitter_types_c::*;
+use treesitter_types_c::{
+    tree_sitter::{Query, QueryCursor},
+    *,
+};
 
 use crate::source::{Language, ParsedCode, Subroutine, subroutine::Function};
 
+const SUBROUTINE_SEXPR: &str = include_str!("../../assets/queries/c.scm");
 #[derive(Debug, Clone)]
 pub struct C;
 
@@ -25,6 +28,7 @@ impl Language for C {
 
     fn reparse(text: &str, old_tree: Option<&Self::Tree>) -> Result<Self::Tree, Self::ParseError> {
         let mut parser = tree_sitter::Parser::new();
+        // TODO: eventually use parse_with_options to have a progress bar callback
         parser
             .set_language(&tree_sitter_c::LANGUAGE.into())
             .expect("tree-sitter-c version mismatch");
@@ -34,8 +38,13 @@ impl Language for C {
     fn subroutines(
         code: &Arc<ParsedCode<Self>>,
     ) -> Vec<Result<Subroutine<Self>, Self::ParseError>> {
-        let bytes = code.text.to_string();
-        let unit = match TranslationUnit::from_node(code.tree().root_node(), bytes.as_bytes()) {
+        let query =
+            Query::new(&code.tree().language(), SUBROUTINE_SEXPR).expect("query to compile");
+        let mut cursor = QueryCursor::new();
+        // TODO: use matches with options to have a progress bar callback
+        let text = code.text.to_string();
+        cursor.matches(&query, code.tree().root_node(), text.as_bytes());
+        let unit = match TranslationUnit::from_node(code.tree().root_node(), text.as_bytes()) {
             Ok(unit) => unit,
             Err(e) => return vec![Err(e)],
         };

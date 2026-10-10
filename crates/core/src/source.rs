@@ -102,7 +102,8 @@ impl<L: Language> Source for Code<L> {
 
 impl<L: Language> Code<L> {
     fn build(text: Rope, strict: bool, old_tree: Option<&L::Tree>) -> Result<Self, L::ParseError> {
-        let tree = L::reparse(&text.to_string(), old_tree)?;
+        // TODO: old_tree is hard-coded as None - treesitter trees need to be edited with edit if they are to be reparsed
+        let tree = L::reparse(&text.to_string(), None)?;
         let parsed = Arc::new(ParsedCode { text, tree });
         let mut subroutines = L::subroutines(&parsed);
         if strict {
