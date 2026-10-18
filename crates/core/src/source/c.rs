@@ -2,8 +2,9 @@
 
 use std::{ops::Range, sync::Arc};
 
+use thiserror::Error;
 use treesitter_types_c::{
-    tree_sitter::{Query, QueryCursor},
+    tree_sitter::{Query, QueryCursor, StreamingIterator},
     *,
 };
 
@@ -18,12 +19,15 @@ pub struct Extra {
     return_type_span: Range<usize>,
 }
 
+#[derive(Debug, Error, Clone)]
+pub enum ParseError {}
+
 impl Language for C {
     const NAME: &str = "C";
     const FILE_EXTENSIONS: &[&str] = &[".c", ".h"];
 
     type Tree = tree_sitter::Tree;
-    type ParseError = treesitter_types_c::ParseError;
+    type ParseError = ParseError;
     type Extra = Extra;
 
     fn reparse(text: &str, old_tree: Option<&Self::Tree>) -> Result<Self::Tree, Self::ParseError> {
@@ -43,30 +47,47 @@ impl Language for C {
         let mut cursor = QueryCursor::new();
         // TODO: use matches with options to have a progress bar callback
         let text = code.text.to_string();
-        cursor.matches(&query, code.tree().root_node(), text.as_bytes());
-        let unit = match TranslationUnit::from_node(code.tree().root_node(), text.as_bytes()) {
-            Ok(unit) => unit,
-            Err(e) => return vec![Err(e)],
-        };
-
-        unit.children
-            .iter()
-            .filter_map(|child| {
-                let TranslationUnitChildren::FunctionDefinition(def) = child else {
-                    return None;
-                };
-                let span = child.span();
-                let name_span = todo!("span of the identifier in def's declarator");
-                let extra = Extra {
-                    return_type_span: todo!("span of def's type"),
-                };
-                Some(Ok(Subroutine::new(
+        let captures = cursor.captures(&query, code.tree().root_node(), text.as_bytes());
+        let capture_groups = query.capture_names();
+        captures
+            .map(|(m, _)| {
+                let name_span = m.captures.iter().find_map(|capture| {
+                    if capture_groups[capture.index as usize] == "function.name" {
+                        Some(capture.node.byte_range())
+                    } else {
+                        None
+                    }
+                });
+                let definition_span = m
+                    .captures
+                    .iter()
+                    .find_map(|capture| {
+                        if capture_groups[capture.index as usize] == "function.definition" {
+                            Some(capture.node.byte_range())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap();
+                let return_type_span = m
+                    .captures
+                    .iter()
+                    .find_map(|capture| {
+                        if capture_groups[capture.index as usize] == "function.return_type" {
+                            Some(capture.node.byte_range())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap();
+                Ok(Subroutine::<C>::new(
                     code.clone(),
                     name_span,
-                    span.start_byte..span.end_byte,
-                    extra,
-                )))
+                    definition_span,
+                    Extra { return_type_span },
+                ))
             })
+            .cloned()
             .collect()
     }
 }

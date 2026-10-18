@@ -1,5 +1,4 @@
-; S-expression for extracting C functions
-(function_definition) @function.definition
+(function_definition
   type: (_) @function.return_type
   declarator: (function_declarator
-    declarator: (identifier) @function.name)
+    declarator: (identifier) @function.name)) @function.definition

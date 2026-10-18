@@ -15,6 +15,13 @@ pub trait Callable: Debug + Any {
     fn span(&self) -> Range<usize>;
 }
 
+impl Display for dyn Callable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let definition = self.definition();
+        write!(f, "{definition}")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Subroutine<L: Language> {
     source: Arc<ParsedCode<L>>,
@@ -23,6 +30,7 @@ pub struct Subroutine<L: Language> {
     #[allow(unused)]
     extra: L::Extra,
 }
+
 impl<L: Language> Callable for Subroutine<L> {
     fn name(&self) -> Option<RopeSlice<'_>> {
         self.name_span
@@ -65,8 +73,8 @@ impl<L: Language> Subroutine<L> {
 
 impl<L: Language> Display for Subroutine<L> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let definition = self.definition();
-        write!(f, "{definition}")
+        let out = self as &dyn Callable;
+        write!(f, "{out}")
     }
 }
 
