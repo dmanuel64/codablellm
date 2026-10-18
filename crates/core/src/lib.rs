@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+pub mod extractor;
 pub mod source;
 
 pub fn add(left: u64, right: u64) -> u64 {

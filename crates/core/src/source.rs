@@ -3,7 +3,9 @@ mod subroutine;
 
 use std::{
     any::Any,
+    ffi::OsStr,
     fmt::{Debug, Display},
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -237,4 +239,25 @@ impl Display for AnyCode {
         let source = &self.0;
         write!(f, "{source}")
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct CodeFile {
+    pub path: PathBuf,
+    pub code: AnyCode,
+}
+
+pub fn is_file<L, P>(path: &P) -> bool
+where
+    L: Language,
+    P: AsRef<Path> + ?Sized,
+{
+    L::FILE_EXTENSIONS.contains(
+        &path
+            .as_ref()
+            .extension()
+            .map(OsStr::to_string_lossy)
+            .unwrap_or_default()
+            .as_ref(),
+    )
 }
