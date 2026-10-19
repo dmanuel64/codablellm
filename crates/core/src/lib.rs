@@ -1,7 +1,15 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+use mimalloc::MiMalloc;
+
+pub use crate::dataset::Dataset;
+
+pub mod dataset;
 pub mod extractor;
 pub mod source;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right
