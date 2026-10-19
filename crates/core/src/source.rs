@@ -38,6 +38,7 @@ pub trait Language: Sized + Debug + Clone + 'static {
 
     type Tree: Debug;
     type ParseError: std::error::Error;
+    // TODO: find a better name for this
     type Extra: std::fmt::Debug + Clone;
 
     fn reparse(text: &str, old_tree: Option<&Self::Tree>) -> Result<Self::Tree, Self::ParseError>;
@@ -141,7 +142,7 @@ impl<L: Language> Code<L> {
     pub fn find_subroutine(&self, qualified_identifier: &str) -> Option<&Subroutine<L>> {
         self.subroutines
             .iter()
-            .find(|subroutine| {
+            .find(|&subroutine| {
                 subroutine.as_ref().is_ok_and(|s| {
                     s.name()
                         .as_ref()
