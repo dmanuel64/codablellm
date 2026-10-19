@@ -1,5 +1,5 @@
 [project]
-name = "codablellm-pyo3"
+name = "codablellm"
 dynamic = ["version"]
 description = "Add your description here"
 readme = "README.md"
@@ -13,8 +13,8 @@ classifiers = [
 dependencies = []
 
 [tool.maturin]
-module-name = "codablellm_pyo3._core"
-python-packages = ["codablellm_pyo3"]
+module-name = "codablellm._core"
+python-packages = ["codablellm"]
 python-source = "src"
 
 [tool.uv]
@@ -28,3 +28,8 @@ cache-keys = [
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
+
+[dependency-groups]
+dev = [
+    "maturin>=1.15.0",
+]

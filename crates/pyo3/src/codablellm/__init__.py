@@ -1,4 +1,4 @@
-from codablellm_pyo3._core import hello_from_bin
+from codablellm._core import hello_from_bin
 
 
 def hello() -> str:
