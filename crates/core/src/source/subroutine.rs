@@ -13,6 +13,7 @@ pub trait Callable: Debug + Any {
     fn name(&self) -> Option<RopeSlice<'_>>;
     fn definition(&self) -> RopeSlice<'_>;
     fn span(&self) -> Range<usize>;
+    fn language(&self) -> &str;
 }
 
 impl Display for dyn Callable {
@@ -46,6 +47,10 @@ impl<L: Language> Callable for Subroutine<L> {
 
     fn span(&self) -> Range<usize> {
         self.definition_span.clone()
+    }
+
+    fn language(&self) -> &str {
+        L::NAME
     }
 }
 

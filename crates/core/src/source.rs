@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "c")]
 pub use crate::source::c::C;
-use crate::source::subroutine::Callable;
+pub use crate::source::subroutine::Callable;
 pub use crate::source::subroutine::{
     AssociatedFunction, Function, Method, Scope, StaticMethod, Subroutine,
 };

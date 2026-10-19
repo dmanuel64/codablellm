@@ -3,6 +3,7 @@ set default-list
 
 mod build "just/build.just"
 mod run "just/run.just"
+mod serve "just/serve.just"
 
 import "just/globals.just"
 

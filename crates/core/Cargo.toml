@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 crop = { version = "0.4", features = ["serde"] }
 mimalloc = "0.1"
-polars = { version = "0.55", features = ["lazy"] }
+polars = { version = "0.55", features = ["fmt", "lazy"] }
 serde = { version = "1", features = ["derive"] }
 tempfile = "3"
 thiserror = "2"

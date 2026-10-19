@@ -1,4 +1,7 @@
-use codablellm_core::source::{AnyCode, C, Code, Language, Source, Subroutine};
+use codablellm_core::{
+    Dataset,
+    source::{AnyCode, C, Code, Language, Source, Subroutine},
+};
 
 fn foo() -> Subroutine<C> {
     unimplemented!()
@@ -17,7 +20,8 @@ fn main() {
 void bar() {
     
 }";
-    let code = Code::<C>::new(test_str).unwrap();
-    println!("{:#?}", code.subroutines());
+    let code: AnyCode = Code::<C>::new(test_str).unwrap().into();
+    let dataset = Dataset::new(vec![code]).unwrap();
+    println!("{dataset}");
     // let b = bar().as_c().unwrap().callables().first().unwrap();
 }

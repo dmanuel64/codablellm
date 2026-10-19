@@ -51,6 +51,7 @@ impl Language for C {
         let capture_groups = query.capture_names();
         captures
             .map(|(m, _)| {
+                // TODO: optimize this with a zip
                 let name_span = m.captures.iter().find_map(|capture| {
                     if capture_groups[capture.index as usize] == "function.name" {
                         Some(capture.node.byte_range())
