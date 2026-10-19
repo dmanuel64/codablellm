@@ -1,14 +1,14 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+use pyo3::prelude::*;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// A Python module implemented in Rust. The name of this module must match
+/// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
+/// import the module.
+#[pymodule]
+mod _core {
+    use pyo3::prelude::*;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    #[pyfunction]
+    fn hello_from_bin() -> String {
+        "Hello from codablellm-pyo3!".to_string()
     }
 }
