@@ -47,11 +47,11 @@ impl Language for C {
         let mut cursor = QueryCursor::new();
         // TODO: use matches with options to have a progress bar callback
         let text = code.text.to_string();
-        let captures = cursor.captures(&query, code.tree().root_node(), text.as_bytes());
+        let matches = cursor.matches(&query, code.tree().root_node(), text.as_bytes());
         let capture_groups = query.capture_names();
-        captures
-            .map(|(m, _)| {
-                // TODO: optimize this with a zip
+        matches
+            .map(|m| {
+                // TODO: optimize this like how you did the collect in Dataset
                 let name_span = m.captures.iter().find_map(|capture| {
                     if capture_groups[capture.index as usize] == "function.name" {
                         Some(capture.node.byte_range())
