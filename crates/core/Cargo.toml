@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 crop = { version = "0.4", features = ["serde"] }
+directories = "6"
+indicatif = "0.18"
 mimalloc = "0.1"
 polars = { version = "0.55" }
 serde = { version = "1", features = ["derive"] }
