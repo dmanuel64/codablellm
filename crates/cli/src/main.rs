@@ -1,6 +1,6 @@
 use codablellm_core::{
-    Dataset,
-    source::{AnyCode, C, Code, Language, Source, Subroutine},
+    dataset,
+    source::{AnyCode, C, Code, Subroutine},
 };
 
 fn foo() -> Subroutine<C> {
@@ -21,7 +21,7 @@ void bar() {
     
 }";
     let code: AnyCode = Code::<C>::new(test_str).unwrap().into();
-    let dataset = Dataset::new(vec![code]).unwrap();
-    println!("{dataset}");
+    let dataset = dataset::build(vec![code]).unwrap();
+    println!("{dataset:?}");
     // let b = bar().as_c().unwrap().callables().first().unwrap();
 }

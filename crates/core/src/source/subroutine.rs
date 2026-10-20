@@ -30,7 +30,6 @@ pub struct Subroutine<L: Language> {
     source: Arc<ParsedCode<L>>,
     name_span: Option<Range<usize>>,
     definition_span: Range<usize>,
-    #[allow(unused)]
     extra: L::Extra,
 }
 

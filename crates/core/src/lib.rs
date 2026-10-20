@@ -2,8 +2,6 @@
 
 use mimalloc::MiMalloc;
 
-pub use crate::dataset::Dataset;
-
 pub mod dataset;
 pub mod extractor;
 pub mod source;
