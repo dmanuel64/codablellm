@@ -2,8 +2,13 @@
 
 use mimalloc::MiMalloc;
 
+pub use crate::extractor::Options as ExtractorOptions;
+pub use crate::pipeline::Options;
+pub use crate::pipeline::run as create_dataset;
+
 pub mod dataset;
 pub mod extractor;
+pub mod pipeline;
 pub mod source;
 
 #[global_allocator]
