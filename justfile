@@ -15,14 +15,14 @@ import "just/globals.just"
 [windows]
 clean *args:
     {{ cargo }} clean {{ args }}
-    -Remove-Item -Path {{ quote(join(pyo3_path, ".venv")) }} -Recurse -Force -ErrorAction SilentlyContinue
+    -Remove-Item -Path {{ quote(join(pyo3_path, ".venv")) }}, {{ quote(goreleaser_dist_path) }} -Recurse -Force -ErrorAction SilentlyContinue
 
 # Remove all built artifacts
 [arg("args", help="Additional arguments to pass to 'cargo clean'")]
 [linux]
 clean *args:
     {{ cargo }} clean {{ args }}
-    rm -rf {{ quote(pyo3_path / ".venv") }}
+    rm -rf {{ quote(pyo3_path / ".venv") }} {{ quote(goreleaser_dist_path) }}
 
 # Run cargo tests
 [arg("args", help="Additional arguments to pass to 'cargo test'")]

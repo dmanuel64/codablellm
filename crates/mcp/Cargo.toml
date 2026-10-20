@@ -4,4 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+codablellm-core = { version = "0.1", path = "../core", features = [
+    "all-languages",
+] }
 rmcp = { version = "3", features = ["server"] }
