@@ -8,19 +8,18 @@
 
 version: 2
 
-# before:
-#   hooks:
-#     # if you don't do these things before calling goreleaser, it might be a
-#     # good idea to do them here:
-#     - rustup default stable
-#     - cargo install --locked cargo-zigbuild
-#     - cargo fetch --locked
+before:
+  hooks:
+    # if you don't do these things before calling goreleaser, it might be a
+    # good idea to do them here:
+    # - rustup default stable
+    - cargo install --locked cargo-zigbuild cargo-xwin
+    - cargo fetch --locked
 
 builds:
-  - id: codablellm-windows-native
-    skip: >-
-      {{ ne .Runtime.Goos "windows" }}
+  - id: windows-x86_64
     builder: rust
+    tool: cargo-xwin
     command: build
     flags:
       - --release
@@ -28,19 +27,20 @@ builds:
     targets:
       - x86_64-pc-windows-msvc
 
-  - id: codablellm-windows-xwin
-    skip: >-
-      {{ eq .Runtime.Goos "windows" }}
+  - id: windows-arm64
     builder: rust
-    command: xwin
+    env:
+      # Explicitly set the cross compiler to clang for ARM64 Windows so Mimalloc does not mistake it for a x86_64 MSVC compiler
+      - XWIN_CROSS_COMPILER=clang
+    tool: cargo-xwin
+    command: build
     flags:
-      - build
       - --release
       - --package=codablellm
     targets:
-      - x86_64-pc-windows-msvc
+      - aarch64-pc-windows-msvc
 
-  - id: codablellm-darwin
+  - id: macos
     builder: rust
     flags:
       - --release
@@ -49,7 +49,7 @@ builds:
       - x86_64-apple-darwin
       - aarch64-apple-darwin
 
-  - id: codablellm-linux
+  - id: linux
     builder: rust
     flags:
       - --release
@@ -61,7 +61,7 @@ builds:
       - aarch64-unknown-linux-musl
 
 universal_binaries:
-  - id: codablellm-darwin
+  - id: macos
     # name_template: "{{ .ProjectName }}"
     replace: true
 
