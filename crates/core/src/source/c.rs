@@ -2,13 +2,17 @@
 
 use std::{ops::Range, sync::Arc};
 
+use crop::RopeSlice;
 use thiserror::Error;
 use treesitter_types_c::{
     tree_sitter::{Query, QueryCursor, StreamingIterator},
     *,
 };
 
-use crate::source::{Language, ParsedCode, Subroutine, subroutine::Function};
+use crate::{
+    dataset,
+    source::{Callable, Language, ParsedCode, Subroutine, subroutine::Function},
+};
 
 const SUBROUTINE_SEXPR: &str = include_str!("../../assets/queries/c.scm");
 #[derive(Debug, Clone)]
@@ -90,6 +94,14 @@ impl Language for C {
             })
             .cloned()
             .collect()
+    }
+
+    fn entry(subroutine: &Subroutine<Self>) -> crate::dataset::Entry {
+        dataset::Entry {
+            language: Self::NAME.to_string(),
+            name: subroutine.name().as_ref().map(RopeSlice::to_string),
+            definition: subroutine.definition().to_string(),
+        }
     }
 }
 

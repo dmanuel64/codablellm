@@ -12,6 +12,7 @@ use std::{
 use crop::{Rope, RopeSlice};
 use serde::{Deserialize, Serialize};
 
+use crate::dataset;
 #[cfg(feature = "c")]
 pub use crate::source::c::C;
 pub use crate::source::subroutine::Callable;
@@ -23,6 +24,7 @@ pub trait Source: Debug + Any {
     fn language(&self) -> &str;
     fn text(&self) -> &Rope;
     fn callables(&self) -> Vec<&dyn Callable>;
+    fn entries(&self) -> Vec<dataset::Entry>;
 }
 
 impl Display for dyn Source {
@@ -44,6 +46,7 @@ pub trait Language: Sized + Debug + Clone + 'static {
     fn reparse(text: &str, old_tree: Option<&Self::Tree>) -> Result<Self::Tree, Self::ParseError>;
     fn subroutines(code: &Arc<ParsedCode<Self>>)
     -> Vec<Result<Subroutine<Self>, Self::ParseError>>;
+    fn entry(subroutine: &Subroutine<Self>) -> dataset::Entry;
 
     fn parse(text: &str) -> Result<Self::Tree, Self::ParseError> {
         Self::reparse(text, None)
@@ -99,6 +102,14 @@ impl<L: Language> Source for Code<L> {
             .iter()
             .filter_map(|s| s.as_ref().ok())
             .map(|s| s as &dyn Callable)
+            .collect()
+    }
+
+    fn entries(&self) -> Vec<dataset::Entry> {
+        self.subroutines
+            .iter()
+            .filter_map(|s| s.as_ref().ok())
+            .map(L::entry)
             .collect()
     }
 }
@@ -220,6 +231,10 @@ impl Source for AnyCode {
 
     fn callables(&self) -> Vec<&dyn Callable> {
         self.0.callables()
+    }
+
+    fn entries(&self) -> Vec<dataset::Entry> {
+        self.0.entries()
     }
 }
 
