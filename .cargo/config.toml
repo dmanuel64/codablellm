@@ -1,2 +1,5 @@
 [build]
 rustdocflags = ["--deny", "rustdoc::broken_intra_doc_links", "--cfg", "docsrs"]
+
+[alias]
+xtask = "run --package xtask --"

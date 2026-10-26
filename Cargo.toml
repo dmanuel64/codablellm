@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/cli", "crates/pyo3", "crates/core", "crates/mcp"]
+members = ["crates/cli", "crates/pyo3", "crates/core", "crates/mcp", "xtask"]
 default-members = ["crates/cli"]
 resolver = "3"
 
@@ -7,3 +7,10 @@ resolver = "3"
 lto = true
 panic = "abort"
 strip = true
+
+[workspace.dependencies]
+clap = { version = "4", features = ["derive", "wrap_help"] }
+clap-verbosity-flag = { version = "3", features = [
+    "tracing",
+], default-features = false }
+clap_complete = "4"

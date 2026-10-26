@@ -10,5 +10,6 @@ words:
   - SEXPR
   - statig
   - thiserror
+  - xtask
 ignoreWords: []
 import: []

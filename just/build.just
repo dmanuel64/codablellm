@@ -32,3 +32,13 @@ mcp *args:
 [group("docs")]
 rust-docs:
     {{ cargo }} +nightly doc --workspace --no-deps --all-features
+
+# Build man ages for UNIX systems
+[group("docs")]
+man-pages:
+    {{ cargo }} xtask man
+
+# Build shell auto-completions for all compatible shells
+[group("docs")]
+completions:
+    {{ cargo }} xtask completions
