@@ -15,6 +15,12 @@ before:
     # - rustup default stable
     - cargo install --locked cargo-zigbuild cargo-xwin
     - cargo fetch --locked
+    # Create man pages and autocompletions
+    - cargo xtask --all
+
+# ---------------------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------------------
 
 builds:
   - id: windows-x86_64
@@ -65,6 +71,10 @@ universal_binaries:
     # name_template: "{{ .ProjectName }}"
     replace: true
 
+# ---------------------------------------------------------------------------------------
+# Package and Archive
+# ---------------------------------------------------------------------------------------
+
 archives:
   - formats: [tar.gz]
     # this name template makes the OS and Arch compatible with the results of `uname`.
@@ -78,6 +88,34 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    files:
+      - LICENSE*
+      - README.md
+      # - CHANGELOG.md
+      - src: target/dist/man/*
+        dst: man/
+      - src: target/dist/completions/*
+        dst: completions/
+
+chocolateys:
+  - owners: dmanuel64
+    authors: Dylan Manuel
+    description: "TODO: description"
+    project_url: https://codablellm.readthedocs.io
+    project_source_url: https://github.com/dmanuel64/codablellm
+    copyright: 2026 Dylan Manuel
+
+# ---------------------------------------------------------------------------------------
+# Releases
+# ---------------------------------------------------------------------------------------
+
+winget:
+  - publisher: dmanuel64
+    author: Dylan Manuel
+    repository:
+      name: codablellm
+    short_description: "TODO: description"
+    license: MIT OR Apache-2.0
 
 changelog:
   sort: asc

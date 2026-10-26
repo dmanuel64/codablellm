@@ -3,7 +3,9 @@ ignorePaths: []
 dictionaryDefinitions: []
 dictionaries: []
 words:
+  - autocompletions
   - codablellm
+  - dmanuel
   - globwalk
   - mangen
   - serde

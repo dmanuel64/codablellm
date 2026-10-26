@@ -7,6 +7,8 @@ all *args: (_all_rust args) python
 _all_rust *args:
     {{ cargo }} build --workspace {{ args }}
 
+alias codablellm := cli
+
 # Build the CodableLLM CLI
 [arg("args", help="Additional arguments to pass to 'cargo build'. Specifying --release will build a release binary with Goreleaser, and the remaining 'args' will be omitted")]
 [default]
