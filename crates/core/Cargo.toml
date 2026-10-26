@@ -8,8 +8,8 @@ crop = { version = "0.4", features = ["serde"] }
 derive_more = { version = "2", features = ["debug"] }
 directories = "6"
 globwalk = "0.9"
-indicatif = "0.18"
-polars = { version = "0.55" }
+polars = "0.55"
+rayon = "1"
 serde = { version = "1", features = ["derive"] }
 statig = { version = "0.4", features = ["serde"] }
 tempfile = "3"

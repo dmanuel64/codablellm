@@ -4,7 +4,6 @@ use std::{
 };
 
 use directories::ProjectDirs;
-use indicatif::MultiProgress;
 use statig::prelude::*;
 
 use crate::{extractor, source};
@@ -20,9 +19,7 @@ pub static STATE_DIR: LazyLock<Mutex<PathBuf>> = LazyLock::new(|| {
 });
 
 #[derive(Debug, Default)]
-pub struct DatasetGenerator {
-    progress: MultiProgress,
-}
+pub struct DatasetGenerator;
 
 #[derive(Debug)]
 pub enum Event {

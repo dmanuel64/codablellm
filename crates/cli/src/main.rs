@@ -24,7 +24,7 @@ fn main() {
 void bar() {
     
 }";
-    let code: AnyCode = Code::<C>::new(test_str).unwrap().into();
+    let code: AnyCode = Code::<C>::parse(test_str).unwrap().into();
     let dataset = dataset::build(vec![code]).unwrap();
     println!("{dataset:?}");
     // let b = bar().as_c().unwrap().callables().first().unwrap();

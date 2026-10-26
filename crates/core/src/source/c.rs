@@ -11,7 +11,7 @@ use treesitter_types_c::{
 
 use crate::{
     dataset,
-    source::{Callable, Language, ParsedCode, Subroutine, subroutine::Function},
+    source::{Callable, Language, ParseOptions, ParsedCode, Subroutine, subroutine::Function},
 };
 
 const SUBROUTINE_SEXPR: &str = include_str!("../../assets/queries/c.scm");
@@ -34,7 +34,11 @@ impl Language for C {
     type ParseError = ParseError;
     type Extra = Extra;
 
-    fn reparse(text: &str, old_tree: Option<&Self::Tree>) -> Result<Self::Tree, Self::ParseError> {
+    fn reparse_with_options(
+        text: &str,
+        old_tree: Option<&Self::Tree>,
+        options: &ParseOptions,
+    ) -> Result<Self::Tree, Self::ParseError> {
         let mut parser = tree_sitter::Parser::new();
         // TODO: eventually use parse_with_options to have a progress bar callback
         parser

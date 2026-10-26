@@ -34,6 +34,11 @@ impl Display for dyn Source {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct ParseOptions {
+    pub strict: bool,
+}
+
 pub trait Language: Sized + Debug + Clone + 'static {
     const NAME: &str;
     const FILE_EXTENSIONS: &[&str];
@@ -43,13 +48,28 @@ pub trait Language: Sized + Debug + Clone + 'static {
     // TODO: find a better name for this
     type Extra: std::fmt::Debug + Clone;
 
-    fn reparse(text: &str, old_tree: Option<&Self::Tree>) -> Result<Self::Tree, Self::ParseError>;
+    fn reparse_with_options(
+        text: &str,
+        old_tree: Option<&Self::Tree>,
+        options: &ParseOptions,
+    ) -> Result<Self::Tree, Self::ParseError>;
     fn subroutines(code: &Arc<ParsedCode<Self>>)
     -> Vec<Result<Subroutine<Self>, Self::ParseError>>;
     fn entry(subroutine: &Subroutine<Self>) -> dataset::Entry;
 
     fn parse(text: &str) -> Result<Self::Tree, Self::ParseError> {
         Self::reparse(text, None)
+    }
+
+    fn parse_with_options(
+        text: &str,
+        options: &ParseOptions,
+    ) -> Result<Self::Tree, Self::ParseError> {
+        Self::reparse_with_options(text, None, options)
+    }
+
+    fn reparse(text: &str, old_tree: Option<&Self::Tree>) -> Result<Self::Tree, Self::ParseError> {
+        Self::reparse_with_options(text, old_tree, &ParseOptions::default())
     }
 }
 
@@ -84,7 +104,7 @@ impl<L: Language> Serialize for Code<L> {
 impl<'de, L: Language> Deserialize<'de> for Code<L> {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let text = Rope::deserialize(d)?;
-        Self::build(text, false, None).map_err(serde::de::Error::custom)
+        Self::reparse(text, None, &ParseOptions::default()).map_err(serde::de::Error::custom)
     }
 }
 
@@ -115,12 +135,15 @@ impl<L: Language> Source for Code<L> {
 }
 
 impl<L: Language> Code<L> {
-    fn build(text: Rope, strict: bool, old_tree: Option<&L::Tree>) -> Result<Self, L::ParseError> {
-        // TODO: old_tree is hard-coded as None - treesitter trees need to be edited with edit if they are to be reparsed
-        let tree = L::reparse(&text.to_string(), None)?;
+    fn reparse(
+        text: Rope,
+        old_tree: Option<&L::Tree>,
+        options: &ParseOptions,
+    ) -> Result<Self, L::ParseError> {
+        let tree = L::reparse(&text.to_string(), old_tree)?;
         let parsed = Arc::new(ParsedCode { text, tree });
         let mut subroutines = L::subroutines(&parsed);
-        if strict {
+        if options.strict {
             subroutines = subroutines
                 .into_iter()
                 .collect::<Result<Vec<_>, _>>()?
@@ -134,12 +157,12 @@ impl<L: Language> Code<L> {
         })
     }
 
-    pub fn new(text: &str) -> Result<Self, L::ParseError> {
-        Self::build(Rope::from(text), false, None)
+    pub fn parse(text: &str) -> Result<Self, L::ParseError> {
+        Self::parse_with_options(text, &ParseOptions::default())
     }
 
-    pub fn new_strict(text: &str) -> Result<Self, L::ParseError> {
-        Self::build(Rope::from(text), true, None)
+    pub fn parse_with_options(text: &str, options: &ParseOptions) -> Result<Self, L::ParseError> {
+        Self::reparse(Rope::from(text), None, options)
     }
 
     pub fn has_errors(&self) -> bool {
@@ -172,7 +195,7 @@ impl<L: Language> Code<L> {
     ) -> Result<R, L::ParseError> {
         let mut text = self.parsed.text.clone();
         let r = f(&mut text);
-        *self = Self::build(text, strict, Some(&self.parsed.tree))?;
+        *self = Self::reparse(text, Some(&self.parsed.tree), &ParseOptions::default())?;
         Ok(r)
     }
 

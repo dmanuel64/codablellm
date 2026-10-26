@@ -1,20 +1,19 @@
-use std::{cell::RefCell, fs, io, path::Path, rc::Rc, thread, time::Duration};
+use std::{cell::RefCell, fs, io, path::Path, rc::Rc};
 
 use derive_more::Debug;
 use globwalk::GlobWalkerBuilder;
-use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressIterator};
 use thiserror::Error;
 
-use crate::source;
 #[cfg(feature = "c")]
 use crate::source::C;
+use crate::source::{self, ParseOptions};
 
 // TODO: could maybe lazy-lock this, but too lazy to figure out how to make it thread-safe
 thread_local! {
     pub static DEFAULT_LOADERS: RefCell<Vec<Loader>> = RefCell::new(
         vec![
             #[cfg(feature = "c")]
-            Loader::new::<C>(),
+            Loader::new::<C>(false),
         ]
     );
 }
@@ -23,14 +22,15 @@ pub type LoaderFn = dyn Fn(&Path) -> Option<Result<source::CodeFile, LoaderError
 
 #[derive(Debug, Clone)]
 pub struct Loader {
-    pub language: &'static str,
+    language: &'static str,
     extensions: &'static [&'static str],
     #[debug(skip)]
     inner: Rc<Box<LoaderFn>>,
+    pub strict: bool,
 }
 
 impl Loader {
-    pub fn new<L: source::Language>() -> Self {
+    pub fn new<L: source::Language>(strict: bool) -> Self {
         Self {
             language: L::NAME,
             extensions: L::FILE_EXTENSIONS,
@@ -38,12 +38,13 @@ impl Loader {
                 source::is_file::<L, _>(path).then(|| {
                     Ok(source::CodeFile {
                         path: path.to_path_buf(),
-                        code: source::Code::<L>::new(&fs::read_to_string(path)?)
+                        code: source::Code::<L>::parse(&fs::read_to_string(path)?)
                             .unwrap()
                             .into(),
                     })
                 })
             })),
+            strict,
         }
     }
 
@@ -69,16 +70,12 @@ pub enum Error {
 
 #[derive(Debug)]
 pub struct Options {
-    pub(crate) progress: MultiProgress,
-    pub hide_progress: bool,
     pub loaders: Vec<Loader>,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
-            progress: MultiProgress::new(),
-            hide_progress: false,
             loaders: DEFAULT_LOADERS.with_borrow(|loaders| loaders.iter().cloned().collect()),
         }
     }
@@ -117,14 +114,6 @@ pub fn extract_with_options<P>(
 where
     P: AsRef<Path>,
 {
-    // Configure progress display
-    if options.hide_progress {
-        options
-            .progress
-            .set_draw_target(ProgressDrawTarget::hidden());
-    }
-    let load_file_progress = options.progress.add(ProgressBar::no_length());
-
     // Create glob pattern
     let extensions: Vec<_> = options
         .loaders
@@ -138,9 +127,7 @@ where
     let walker = GlobWalkerBuilder::from_patterns(path, &[pattern]).build()?;
     Ok(walker
         .into_iter()
-        .progress_with(load_file_progress)
         .filter_map(|entry| {
-            thread::sleep(Duration::from_secs(2));
             let entry = entry.unwrap();
             let path = entry.path();
             let source_file = extract_file(path, options);
