@@ -1,40 +1,51 @@
-use std::{cell::RefCell, fs, io, path::Path, rc::Rc};
+use std::{
+    fs, io,
+    path::Path,
+    sync::{Arc, LazyLock, RwLock},
+};
 
 use derive_more::Debug;
 use globwalk::GlobWalkerBuilder;
+use rayon::prelude::*;
 use thiserror::Error;
 
 #[cfg(feature = "c")]
 use crate::source::C;
 use crate::source::{self, ParseOptions};
 
-// TODO: could maybe lazy-lock this, but too lazy to figure out how to make it thread-safe
-thread_local! {
-    pub static DEFAULT_LOADERS: RefCell<Vec<Loader>> = RefCell::new(
-        vec![
-            #[cfg(feature = "c")]
-            Loader::new::<C>(false),
-        ]
-    );
-}
+pub static DEFAULT_LOADERS: LazyLock<RwLock<Vec<Loader>>> = LazyLock::new(|| {
+    RwLock::new(vec![
+        #[cfg(feature = "c")]
+        Loader::new::<C>(),
+    ])
+});
 
-pub type LoaderFn = dyn Fn(&Path) -> Option<Result<source::CodeFile, LoaderError>>;
+pub type LoaderFn = dyn Fn(&Path) -> Option<Result<source::CodeFile, LoaderError>> + Send + Sync;
+
+#[derive(Debug, Clone, Default)]
+pub struct LoaderOptions {
+    pub parse: ParseOptions,
+}
 
 #[derive(Debug, Clone)]
 pub struct Loader {
     language: &'static str,
     extensions: &'static [&'static str],
     #[debug(skip)]
-    inner: Rc<Box<LoaderFn>>,
-    pub strict: bool,
+    inner: Arc<LoaderFn>,
+    pub options: LoaderOptions,
 }
 
 impl Loader {
-    pub fn new<L: source::Language>(strict: bool) -> Self {
+    pub fn new<L: source::Language>() -> Self {
+        Self::new_with_options::<L>(LoaderOptions::default())
+    }
+
+    pub fn new_with_options<L: source::Language>(options: LoaderOptions) -> Self {
         Self {
             language: L::NAME,
             extensions: L::FILE_EXTENSIONS,
-            inner: Rc::new(Box::new(|path| {
+            inner: Arc::new(|path| {
                 source::is_file::<L, _>(path).then(|| {
                     Ok(source::CodeFile {
                         path: path.to_path_buf(),
@@ -43,8 +54,8 @@ impl Loader {
                             .into(),
                     })
                 })
-            })),
-            strict,
+            }),
+            options,
         }
     }
 
@@ -76,7 +87,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            loaders: DEFAULT_LOADERS.with_borrow(|loaders| loaders.iter().cloned().collect()),
+            loaders: DEFAULT_LOADERS.read().unwrap().to_vec(),
         }
     }
 }
@@ -117,7 +128,7 @@ where
     // Create glob pattern
     let extensions: Vec<_> = options
         .loaders
-        .iter()
+        .par_iter()
         .flat_map(|loader| loader.extensions)
         .copied()
         .collect();
