@@ -5,6 +5,7 @@ dictionaries: []
 words:
   - codablellm
   - globwalk
+  - mangen
   - serde
   - SEXPR
   - statig
