@@ -9,6 +9,7 @@ pub mod dataset;
 pub mod extractor;
 pub mod pipeline;
 pub mod source;
+pub mod transformer;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

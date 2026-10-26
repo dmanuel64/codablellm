@@ -4,6 +4,10 @@ dictionaryDefinitions: []
 dictionaries: []
 words:
   - codablellm
+  - globwalk
+  - serde
   - SEXPR
+  - statig
+  - thiserror
 ignoreWords: []
 import: []
