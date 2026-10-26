@@ -20,7 +20,7 @@ pub use crate::source::subroutine::{
     AssociatedFunction, Function, Method, Scope, StaticMethod, Subroutine,
 };
 
-pub trait Source: Debug + Any {
+pub trait Source: Debug + Any + Send + Sync {
     fn language(&self) -> &str;
     fn text(&self) -> &Rope;
     fn callables(&self) -> Vec<&dyn Callable>;
@@ -39,14 +39,14 @@ pub struct ParseOptions {
     pub strict: bool,
 }
 
-pub trait Language: Sized + Debug + Clone + 'static {
+pub trait Language: Sized + Debug + Clone + Send + Sync + 'static {
     const NAME: &str;
     const FILE_EXTENSIONS: &[&str];
 
-    type Tree: Debug;
-    type ParseError: std::error::Error;
+    type Tree: Debug + Send + Sync;
+    type ParseError: std::error::Error + Send + Sync;
     // TODO: find a better name for this
-    type Extra: std::fmt::Debug + Clone;
+    type Extra: std::fmt::Debug + Clone + Send + Sync;
 
     fn reparse_with_options(
         text: &str,

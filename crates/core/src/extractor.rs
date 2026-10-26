@@ -128,7 +128,7 @@ where
     // Create glob pattern
     let extensions: Vec<_> = options
         .loaders
-        .par_iter()
+        .iter()
         .flat_map(|loader| loader.extensions)
         .copied()
         .collect();
@@ -137,7 +137,7 @@ where
     // Walk all matched files
     let walker = GlobWalkerBuilder::from_patterns(path, &[pattern]).build()?;
     Ok(walker
-        .into_iter()
+        .par_bridge()
         .filter_map(|entry| {
             let entry = entry.unwrap();
             let path = entry.path();
