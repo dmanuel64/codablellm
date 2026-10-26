@@ -2,3 +2,8 @@
 members = ["crates/cli", "crates/pyo3", "crates/core", "crates/mcp"]
 default-members = ["crates/cli"]
 resolver = "3"
+
+[profile.release]
+lto = true
+panic = "abort"
+strip = true

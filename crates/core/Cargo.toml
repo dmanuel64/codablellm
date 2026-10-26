@@ -5,9 +5,10 @@ edition = "2024"
 
 [dependencies]
 crop = { version = "0.4", features = ["serde"] }
+derive_more = { version = "2", features = ["debug"] }
 directories = "6"
+globwalk = "0.9"
 indicatif = "0.18"
-mimalloc = "0.1"
 polars = { version = "0.55" }
 serde = { version = "1", features = ["derive"] }
 statig = { version = "0.4", features = ["serde"] }

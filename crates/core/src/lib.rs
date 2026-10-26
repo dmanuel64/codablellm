@@ -1,18 +1,14 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use mimalloc::MiMalloc;
-
-pub use crate::extractor::Options as ExtractorOptions;
-pub use crate::pipeline::Options;
-pub use crate::pipeline::run as create_dataset;
+pub use crate::extractor::{Error as ExtractorError, Options as ExtractorOptions};
+pub use crate::pipeline::{
+    Options, run as create_dataset, run_with_options as create_dataset_with_options,
+};
 
 pub mod dataset;
 pub mod extractor;
 pub mod pipeline;
 pub mod source;
-
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

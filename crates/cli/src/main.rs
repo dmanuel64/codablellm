@@ -1,7 +1,11 @@
 use codablellm_core::{
-    dataset,
+    ExtractorOptions, dataset,
     source::{AnyCode, C, Code, Subroutine},
 };
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 fn foo() -> Subroutine<C> {
     unimplemented!()

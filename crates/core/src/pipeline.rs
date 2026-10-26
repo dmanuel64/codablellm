@@ -7,7 +7,7 @@ use directories::ProjectDirs;
 use indicatif::MultiProgress;
 use statig::prelude::*;
 
-use crate::extractor;
+use crate::{extractor, source};
 
 pub static STATE_DIR: LazyLock<Mutex<PathBuf>> = LazyLock::new(|| {
     let dirs = ProjectDirs::from("io.github", "dmanuel64", "codablellm")
@@ -25,7 +25,10 @@ pub struct DatasetGenerator {
 }
 
 #[derive(Debug)]
-pub enum Event {}
+pub enum Event {
+    ExtractSourceCode { path: PathBuf },
+    BuildDataset { path: PathBuf },
+}
 
 #[state_machine(
     initial = "State::extract_source_code()",
@@ -37,14 +40,35 @@ impl DatasetGenerator {
     #[state]
     fn extract_source_code(event: &Event) -> Outcome<State> {
         match event {
+            Event::ExtractSourceCode { path } => {
+                let source_files =
+                    extractor::extract_with_options(path, &extractor::Options::default())
+                        .inspect_err(
+                            |error| tracing::error!(%error, "Failed to extract repository"),
+                        )
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter_map(|source_file| {
+                            source_file
+                        .inspect_err(
+                            |error| tracing::error!(%error, "Failed to load source code file"),
+                        )
+                        .ok()
+                        })
+                        .collect();
+                Outcome::Transition(State::BuildDataset { source_files })
+            }
             _ => Super,
         }
     }
 
-    #[state]
-    fn build_dataset(event: &Event) -> Outcome<State> {
-        todo!()
+    #[state(entry_action = "enter_build_dataset")]
+    fn build_dataset(source_files: &Vec<source::CodeFile>, event: &Event) -> Outcome<State> {
+        Outcome::Handled
     }
+
+    #[action]
+    fn enter_build_dataset(source_files: &Vec<source::CodeFile>) {}
 }
 
 impl DatasetGenerator {
@@ -58,6 +82,12 @@ pub struct Options {
     pub extractor: extractor::Options,
 }
 
-pub fn run() {
+pub fn run(path: PathBuf) {
+    run_with_options(path, Options::default());
+}
+
+pub fn run_with_options(path: PathBuf, options: Options) {
     let mut generator = DatasetGenerator::default().state_machine();
+    generator.handle(&Event::ExtractSourceCode { path });
+    // generator.handle(&Event::BuildDataset { path });
 }
