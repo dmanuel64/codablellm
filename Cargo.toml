@@ -3,6 +3,9 @@ members = ["crates/cli", "crates/pyo3", "crates/core", "crates/mcp", "xtask"]
 default-members = ["crates/cli"]
 resolver = "3"
 
+[workspace.package]
+authors = ["Dylan Manuel"]
+
 [profile.release]
 lto = true
 panic = "abort"

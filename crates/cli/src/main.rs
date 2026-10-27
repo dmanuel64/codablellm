@@ -1,6 +1,8 @@
 mod cli;
+mod logger;
 
 use clap::Parser;
+use cliclack::{input, intro, outro};
 use color_eyre::eyre::Result;
 use mimalloc::MiMalloc;
 
@@ -16,13 +18,30 @@ fn install_error_handlers() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    // Init error handlers, parse args, and configure logger
+    // Init error handlers and parse args
     install_error_handlers()?;
     let args = Cli::parse();
-    tracing_subscriber::fmt()
-        .with_max_level(args.verbosity)
-        .with_writer(std::io::stderr)
-        .init();
 
+    if let Some(command) = args.command {
+        match command {
+            cli::Commands::Completion => todo!(),
+        }
+    }
+
+    intro("Create Dataset")?;
+    // Configure logger
+    logger::init(args.verbosity.tracing_level_filter());
+    // let number: String = input("What is the meaning of life?")
+    //     .placeholder("Not sure")
+    //     .validate(|input: &String| {
+    //         if input.is_empty() {
+    //             Err("Value is required!")
+    //         } else {
+    //             Ok(())
+    //         }
+    //     })
+    //     .interact()?;
+    codablellm_core::create_dataset(args.repo.unwrap());
+    outro("You're all set!")?;
     Ok(())
 }
