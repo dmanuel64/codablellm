@@ -11,7 +11,7 @@ use tracing::{
 };
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 
-use crate::cli::is_interactive;
+use crate::cli::INTERACTIVE;
 
 pub struct CliclackLayer;
 
@@ -46,7 +46,7 @@ impl<S: Subscriber> Layer<S> for CliclackLayer {
 }
 
 pub(crate) fn init(filter: LevelFilter) {
-    let interactive = is_interactive();
+    let interactive = !*INTERACTIVE;
     tracing_subscriber::registry()
         .with(filter)
         .with(interactive.then_some(CliclackLayer))
