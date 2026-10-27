@@ -23,8 +23,13 @@ pub struct DatasetGenerator;
 
 #[derive(Debug)]
 pub enum Event {
-    ExtractSourceCode { path: PathBuf },
-    BuildDataset { path: PathBuf },
+    ExtractSourceCode {
+        path: PathBuf,
+        options: extractor::Options,
+    },
+    BuildDataset {
+        path: PathBuf,
+    },
 }
 
 #[state_machine(
@@ -37,22 +42,19 @@ impl DatasetGenerator {
     #[state]
     fn extract_source_code(event: &Event) -> Outcome<State> {
         match event {
-            Event::ExtractSourceCode { path } => {
-                let source_files =
-                    extractor::extract_with_options(path, &extractor::Options::default())
-                        .inspect_err(
-                            |error| tracing::error!(%error, "Failed to extract repository"),
-                        )
-                        .unwrap_or_default()
-                        .into_iter()
-                        .filter_map(|source_file| {
-                            source_file
-                        .inspect_err(
-                            |error| tracing::error!(%error, "Failed to load source code file"),
-                        )
-                        .ok()
-                        })
-                        .collect();
+            Event::ExtractSourceCode { path, options } => {
+                let source_files = extractor::extract_with_options(path, options)
+                    .inspect_err(|error| tracing::error!(%error, "Failed to extract repository"))
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|source_file| {
+                        source_file
+                            .inspect_err(
+                                |error| tracing::error!(%error, "Failed to load source code file"),
+                            )
+                            .ok()
+                    })
+                    .collect();
                 Outcome::Transition(State::BuildDataset { source_files })
             }
             _ => Super,
@@ -85,6 +87,9 @@ pub fn run(path: PathBuf) {
 
 pub fn run_with_options(path: PathBuf, options: Options) {
     let mut generator = DatasetGenerator::default().state_machine();
-    generator.handle(&Event::ExtractSourceCode { path });
+    generator.handle(&Event::ExtractSourceCode {
+        path,
+        options: options.extractor,
+    });
     // generator.handle(&Event::BuildDataset { path });
 }

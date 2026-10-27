@@ -17,3 +17,4 @@ clap-verbosity-flag = { version = "3", features = [
     "tracing",
 ], default-features = false }
 clap_complete = "4"
+strum = { version = "0.28", features = ["derive"] }

@@ -1,12 +1,13 @@
 use std::{
     fs, io,
+    num::NonZero,
     path::Path,
     sync::{Arc, LazyLock, RwLock},
 };
 
 use derive_more::Debug;
 use globwalk::GlobWalkerBuilder;
-use rayon::prelude::*;
+use rayon::{ThreadPoolBuilder, prelude::*};
 use thiserror::Error;
 
 #[cfg(feature = "c")]
@@ -77,17 +78,21 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("TODO: message")]
     Glob(#[from] globwalk::GlobError),
+    #[error("TODO: message")]
+    ThreadPool(#[from] rayon::ThreadPoolBuildError),
 }
 
 #[derive(Debug)]
 pub struct Options {
     pub loaders: Vec<Loader>,
+    pub max_jobs: Option<NonZero<usize>>,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
             loaders: DEFAULT_LOADERS.read().unwrap().to_vec(),
+            max_jobs: None,
         }
     }
 }
@@ -113,7 +118,7 @@ impl Options {
 
 pub fn extract<P>(path: &P) -> Result<Vec<Result<source::CodeFile, LoaderError>>, Error>
 where
-    P: AsRef<Path>,
+    P: AsRef<Path> + Sync,
 {
     extract_with_options(path, &Options::default())
 }
@@ -123,7 +128,7 @@ pub fn extract_with_options<P>(
     options: &Options,
 ) -> Result<Vec<Result<source::CodeFile, LoaderError>>, Error>
 where
-    P: AsRef<Path>,
+    P: AsRef<Path> + Sync,
 {
     // Create glob pattern
     let extensions: Vec<_> = options
@@ -134,23 +139,36 @@ where
         .collect();
     let pattern = format!("**/*.{{{}}}", extensions.join(","));
 
-    // Walk all matched files
-    let walker = GlobWalkerBuilder::from_patterns(path, &[pattern]).build()?;
-    Ok(walker
-        .par_bridge()
-        .filter_map(|entry| {
-            let entry = entry.unwrap();
-            let path = entry.path();
-            let source_file = extract_file(path, options);
-            if source_file.is_none() {
-                tracing::warn!(
-                    file = path.display().to_string(),
-                    "Could determine loader for source code file"
-                );
-            }
-            source_file
-        })
-        .collect())
+    let extract_dir = || {
+        // Walk all matched files
+        let walker = GlobWalkerBuilder::from_patterns(path, &[pattern]).build()?;
+        Ok(walker
+            .par_bridge()
+            .filter_map(|entry| {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                let source_file = extract_file(path, options);
+                if source_file.is_none() {
+                    tracing::warn!(
+                        file = path.display().to_string(),
+                        "Could determine loader for source code file"
+                    );
+                }
+                source_file
+            })
+            .collect())
+    };
+
+    if let Some(max_jobs) = options.max_jobs {
+        // Create thread pool with specified number of threads
+        ThreadPoolBuilder::new()
+            .num_threads(max_jobs.get())
+            .build()?
+            .install(extract_dir)
+    } else {
+        // Use global thread pool
+        extract_dir()
+    }
 }
 
 fn extract_file(path: &Path, options: &Options) -> Option<Result<source::CodeFile, LoaderError>> {

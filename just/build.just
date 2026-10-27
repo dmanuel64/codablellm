@@ -33,7 +33,7 @@ mcp *args:
 # Build Docs.rs documentation
 [group("docs")]
 rust-docs:
-    {{ cargo }} +nightly doc --workspace --no-deps --all-features
+    {{ cargo }} +nightly doc --workspace --no-deps --all-features --exclude xtask
 
 # Build man ages for UNIX systems
 [group("docs")]
