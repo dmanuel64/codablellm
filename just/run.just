@@ -12,5 +12,6 @@ cli *args:
 # Run CodableLLM in a Python REPL
 [arg("args", help="Additional arguments to pass to 'python'")]
 python *args: _setup_python_venv
+    {{ cargo }} run --package codablellm-pyo3 --bin stub_gen
     {{ uv }} --directory {{ quote(pyo3_path) }} run maturin develop
     {{ uv }} --directory {{ quote(pyo3_path) }} run python {{ args }}

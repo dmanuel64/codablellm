@@ -2,33 +2,18 @@
 name = "codablellm-pyo3"
 version = "2.0.0-alpha.1"
 edition = "2024"
+publish = false
 
 [lib]
 name = "_core"
 # "cdylib" is necessary to produce a shared library for Python to import from.
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-codablellm-core = { version = "0.1", path = "../core" }
+codablellm-core = { version = "0.1", path = "../core", features = [
+    "all-languages",
+] }
 # "extension-module" tells pyo3 we want to build an extension module (skips linking against libpython.so)
 # "abi3-py39" tells pyo3 (and maturin) to build using the stable ABI with minimum Python version 3.9
-pyo3 = { version = "0.30", features = ["extension-module", "abi3-py39"] }
-
-[features]
-all-languages = ["codablellm-core/all-languages"]
-c = ["codablellm-core/c"]
-cpp = ["codablellm-core/cpp"]
-c-sharp = ["codablellm-core/c-sharp"]
-java = ["codablellm-core/java"]
-go = ["codablellm-core/go"]
-javascript = ["codablellm-core/javascript"]
-typescript = ["codablellm-core/typescript"]
-php = ["codablellm-core/php"]
-python = ["codablellm-core/python"]
-ruby = ["codablellm-core/ruby"]
-rust = ["codablellm-core/rust"]
-scala = ["codablellm-core/scala"]
-swift = ["codablellm-core/swift"]
-lua = ["codablellm-core/lua"]
-haskell = ["codablellm-core/haskell"]
-elixir = ["codablellm-core/elixir"]
+pyo3 = { version = "0.30", features = ["extension-module", "abi3-py310"] }
+pyo3-stub-gen = "0.23"

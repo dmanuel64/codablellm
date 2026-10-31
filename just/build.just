@@ -23,6 +23,7 @@ core *args:
 # Build the CodableLLM Python bindings
 [arg("args", help="Additional arguments to pass to 'maturin build'")]
 python *args: _setup_python_venv
+    {{ cargo }} run --package codablellm-pyo3 --bin stub_gen
     {{ uv }} --directory {{ quote(pyo3_path) }} run maturin build {{ args }}
 
 # Build the CodableLLM MCP server

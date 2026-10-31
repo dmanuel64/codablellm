@@ -4,7 +4,7 @@ dynamic = ["version"]
 description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "Dylan Manuel" }]
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
@@ -16,6 +16,9 @@ dependencies = []
 module-name = "codablellm._core"
 python-packages = ["codablellm"]
 python-source = "src"
+
+[tool.pyo3-stub-gen]
+generate-init-py = true
 
 [tool.uv]
 cache-keys = [
@@ -30,6 +33,4 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [dependency-groups]
-dev = [
-    "maturin>=1.15.0",
-]
+dev = ["maturin>=1.15.0"]
