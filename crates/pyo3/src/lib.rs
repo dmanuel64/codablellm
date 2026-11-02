@@ -84,12 +84,9 @@ mod extractor {
         }
     }
 
-    static DEFAULT_OPTIONS: LazyLock<extractor::Options> =
-        LazyLock::new(|| extractor::Options::default());
-
     #[gen_stub_pyfunction(module = "codablellm._core.extractor")]
     #[pyfunction]
-    #[pyo3(signature = (path, max_jobs = DEFAULT_OPTIONS.max_jobs))]
+    #[pyo3(signature = (path, max_jobs = None))]
     fn extract(
         py: Python<'_>,
         path: PathBuf,
