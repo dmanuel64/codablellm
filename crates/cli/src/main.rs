@@ -87,8 +87,7 @@ fn main() -> Result<()> {
             vec![SourceLanguage::Auto]
         }
     };
-    // Create dataset
-    // codablellm_core::create_dataset(repo);
+    // Create dataset codablellm_core::create_dataset(repo);
     outro("You're all set!")?;
     Ok(())
 }

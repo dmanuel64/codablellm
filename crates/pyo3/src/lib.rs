@@ -92,29 +92,35 @@ mod extractor {
         path: PathBuf,
         max_jobs: Option<NonZero<usize>>,
     ) -> PyResult<Vec<PyExtractResult>> {
-        extractor::extract_with_options(
-            &path,
-            &extractor::Options {
-                max_jobs,
-                ..Default::default()
-            },
-        )
-        .map_err(|err| ExtractorError::new_err(err.to_string()))?
-        .into_iter()
-        .map(|result| {
-            Ok(match result {
+        // TODO: eventually support custom loaders from Python Extract functions
+        // without locking the GIL; only borrow the GIL when creating Python
+        // exceptions
+        let results = py
+            .detach(|| {
+                extractor::extract_with_options(
+                    &path,
+                    &extractor::Options {
+                        max_jobs,
+                        ..Default::default()
+                    },
+                )
+            })
+            .map_err(|err| ExtractorError::new_err(err.to_string()))?;
+
+        Ok(results
+            .into_iter()
+            .map(|result| match result {
                 Ok(file) => PyExtractResult::Ok(PyCodeFile(file)),
                 Err(err) => {
                     PyExtractResult::Err(LoaderError::new_err(err.to_string()).into_value(py))
                 }
             })
-        })
-        .collect()
+            .collect())
     }
 }
 
-/// A Python module implemented in Rust. The name of this module must match
-/// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
+/// A Python module implemented in Rust. The name of this module must match the
+/// `lib.name` setting in the `Cargo.toml`, else Python will not be able to
 /// import the module.
 #[pymodule]
 mod _core {

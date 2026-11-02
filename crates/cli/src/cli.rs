@@ -27,8 +27,9 @@ pub struct Cli {
 
     /// Extract by filtered source code languages
     ///
-    /// Specify "-l"/"--languages" to automatically figure out the source code languages. In a non-interactive
-    /// environment, this will default to "--languages=auto".
+    /// Specify "-l"/"--languages" to automatically figure out the source code
+    /// languages. In a non-interactive environment, this will default to
+    /// "--languages=auto".
     #[arg(
         long = "languages",
         short = 'l',
@@ -68,7 +69,8 @@ pub struct Cli {
     #[arg(long)]
     pub(crate) max_extractor_jobs: Option<NonZero<usize>>,
 
-    // TODO: need a sentinel value to represent when the user passes -o without a value (to ignore interactive prompting)
+    // TODO: need a sentinel value to represent when the user passes -o without
+    // a value (to ignore interactive prompting)
     #[arg(long, short)]
     pub(crate) out: Option<PathBuf>,
 
@@ -78,7 +80,8 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Commands {
-    /// Output shell completion code for the specified shell (zsh, powershell, bash, elvish, or fish)
+    /// Output shell completion code for the specified shell (zsh, powershell,
+    /// bash, elvish, or fish)
     Completion,
 }
 

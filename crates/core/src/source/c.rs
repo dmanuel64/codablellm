@@ -40,7 +40,8 @@ impl Language for C {
         options: &ParseOptions,
     ) -> Result<Self::Tree, Self::ParseError> {
         let mut parser = tree_sitter::Parser::new();
-        // TODO: eventually use parse_with_options to have a progress bar callback
+        // TODO: eventually use parse_with_options to have a progress bar
+        // callback
         parser
             .set_language(&tree_sitter_c::LANGUAGE.into())
             .expect("tree-sitter-c version mismatch");

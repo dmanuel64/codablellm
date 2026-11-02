@@ -23,7 +23,8 @@ impl Display for dyn Callable {
     }
 }
 
-// TODO: does Subroutine need access to the Source tree or can this just be the text rope?
+// TODO: does Subroutine need access to the Source tree or can this just be the
+// text rope?
 
 #[derive(Debug, Clone)]
 pub struct Subroutine<L: Language> {
