@@ -14,11 +14,11 @@ mod source {
         name = "CodeFile",
         module = "codablellm._core.source"
     )]
-    pub struct PyCodeFile(source::CodeFile);
+    pub struct PyCodeFile(pub source::CodeFile);
 
     #[gen_stub_pyclass]
     #[pyclass(subclass, frozen, name = "Code", module = "codablellm._core.source")]
-    pub struct PyCode(AnyCode);
+    pub struct PyCode(pub AnyCode);
 
     #[gen_stub_pyclass]
     #[pyclass(
@@ -27,11 +27,11 @@ mod source {
         name = "Subroutine",
         module = "codablellm._core.source"
     )]
-    pub struct PySubroutine(Box<dyn Callable + Send + Sync>);
+    pub struct PySubroutine(pub Box<dyn Callable + Send + Sync>);
 
     #[gen_stub_pyclass]
     #[pyclass(extends = PySubroutine, frozen, name = "CSubroutine", module = "codablellm._core.source")]
-    pub struct PyCSubroutine(Subroutine<C>);
+    pub struct PyCSubroutine(pub Subroutine<C>);
 
     #[gen_stub_pymethods]
     #[pymethods]
@@ -50,32 +50,69 @@ mod source {
 
 #[pymodule]
 mod extractor {
-    use std::path::PathBuf;
+    use std::{num::NonZero, path::PathBuf, sync::LazyLock};
 
     use codablellm_core::extractor;
-    use pyo3::{exceptions::PyValueError, prelude::*};
-    use pyo3_stub_gen::derive::gen_stub_pyfunction;
+    use pyo3::{
+        exceptions::{PyBaseException, PyException},
+        prelude::*,
+    };
+    use pyo3_stub_gen::{PyStubType, TypeInfo, create_exception, derive::gen_stub_pyfunction};
 
     use crate::source::PyCodeFile;
 
-    struct PyExtractorError(extractor::Error);
+    create_exception!(codablellm._core.extractor, ExtractorError, PyException);
+    create_exception!(codablellm._core.extractor, LoaderError, PyException);
 
-    impl From<PyExtractorError> for PyErr {
-        fn from(error: PyExtractorError) -> Self {
-            PyValueError::new_err(error.0.to_string())
+    #[pymodule_init]
+    fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
+        let py = m.py();
+        m.add("ExtractorError", py.get_type::<ExtractorError>())?;
+        m.add("LoaderError", py.get_type::<LoaderError>())?;
+        Ok(())
+    }
+
+    #[derive(IntoPyObject)]
+    pub enum PyExtractResult {
+        Ok(PyCodeFile),
+        Err(Py<PyBaseException>),
+    }
+
+    impl PyStubType for PyExtractResult {
+        fn type_output() -> TypeInfo {
+            PyCodeFile::type_output() | TypeInfo::unqualified("LoaderError")
         }
     }
 
-    impl From<extractor::Error> for PyExtractorError {
-        fn from(other: extractor::Error) -> Self {
-            Self(other)
-        }
-    }
+    static DEFAULT_OPTIONS: LazyLock<extractor::Options> =
+        LazyLock::new(|| extractor::Options::default());
 
     #[gen_stub_pyfunction(module = "codablellm._core.extractor")]
     #[pyfunction]
-    fn extract(path: PathBuf) -> Result<PyCodeFile, PyExtractorError> {
-        todo!()
+    #[pyo3(signature = (path, max_jobs = DEFAULT_OPTIONS.max_jobs))]
+    fn extract(
+        py: Python<'_>,
+        path: PathBuf,
+        max_jobs: Option<NonZero<usize>>,
+    ) -> PyResult<Vec<PyExtractResult>> {
+        extractor::extract_with_options(
+            &path,
+            &extractor::Options {
+                max_jobs,
+                ..Default::default()
+            },
+        )
+        .map_err(|err| ExtractorError::new_err(err.to_string()))?
+        .into_iter()
+        .map(|result| {
+            Ok(match result {
+                Ok(file) => PyExtractResult::Ok(PyCodeFile(file)),
+                Err(err) => {
+                    PyExtractResult::Err(LoaderError::new_err(err.to_string()).into_value(py))
+                }
+            })
+        })
+        .collect()
     }
 }
 

@@ -5,9 +5,18 @@ import builtins
 from codablellm._core import source
 import os
 import pathlib
+import typing
 __all__ = [
+    "ExtractorError",
+    "LoaderError",
     "extract",
 ]
 
-def extract(path: builtins.str | os.PathLike | pathlib.Path) -> source.CodeFile: ...
+class ExtractorError(builtins.Exception):
+    ...
+
+class LoaderError(builtins.Exception):
+    ...
+
+def extract(path: builtins.str | os.PathLike | pathlib.Path, max_jobs: typing.Optional[builtins.int] = None) -> builtins.list[source.CodeFile  |  LoaderError]: ...
 
